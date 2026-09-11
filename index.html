@@ -1110,6 +1110,7 @@ function Pending({profile, logout, refresh, back}){
 /* ───────── 교회 고르기 · 만들기 · 가입 신청 ───────── */
 function ChurchPicker({sb, session, logout, onPick}){
   const [rows, setRows] = useState(null);      /* 내가 속한/신청한 교회들 */
+  const [canMake, setCanMake] = useState(true); /* 교회를 더 만들 수 있는지 */
   const [mode, setMode] = useState("");        /* "" | "new" | "join" */
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -1127,6 +1128,8 @@ function ChurchPicker({sb, session, logout, onPick}){
       name: (r.churches && r.churches.name) || "이름 없는 교회",
       code: (r.churches && r.churches.join_code) || "",
     })));
+    const can = await sb.rpc("can_create_church");
+    if(!can.error) setCanMake(can.data !== false);
   }, [sb, session]);
   useEffect(()=>{ load(); }, [load]);
 
@@ -1175,11 +1178,16 @@ function ChurchPicker({sb, session, logout, onPick}){
             </div>))}
         </React.Fragment>}
 
-        {mode === "" && <div className="row" style={{marginTop:16}}>
-          <button className="btn" onClick={()=>setMode("new")}>+ 우리 교회 만들기</button>
-          <button className="btn ghost" onClick={()=>setMode("join")}>가입 코드로 신청</button>
-          <button className="btn ghost" style={{marginLeft:"auto"}} onClick={logout}>로그아웃</button>
-        </div>}
+        {mode === "" && <React.Fragment>
+          <div className="row" style={{marginTop:16}}>
+            {canMake && <button className="btn" onClick={()=>setMode("new")}>+ 우리 교회 만들기</button>}
+            <button className="btn ghost" onClick={()=>setMode("join")}>가입 코드로 신청</button>
+            <button className="btn ghost" style={{marginLeft:"auto"}} onClick={logout}>로그아웃</button>
+          </div>
+          {!canMake && <p className="small muted" style={{marginTop:10,marginBottom:0}}>
+            한 계정으로는 교회를 하나만 만들 수 있습니다.
+            다른 교회에 들어가시려면 그 교회의 <b>가입 코드</b>로 신청해 주세요.</p>}
+        </React.Fragment>}
 
         {mode === "new" && <div style={{marginTop:16}}>
           <h2>우리 교회 만들기</h2>
