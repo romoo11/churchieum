@@ -434,11 +434,43 @@
     background:linear-gradient(180deg,#5A7FB4 0%,#2E4E82 42%,#22355C 100%);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.42), 0 2px 5px rgba(22,34,61,.28)}
 
+  /* ── 아래쪽 탭바 (휴대폰) ── */
+  .tabbar{display:none}
   @media (max-width:640px){
-    .top-in{padding:8px 10px;gap:6px}
-    nav{justify-content:flex-start}
-    nav{width:100%;overflow-x:auto;flex-wrap:nowrap}
-    nav button{white-space:nowrap;padding:7px 11px;font-size:14px}
+    .top-in{padding:7px 8px;gap:6px;flex-wrap:nowrap}
+    /* 위 띠에는 교회 이름과 백업·가져오기·교회 바꾸기·로그아웃만 */
+    header.top nav{display:none}
+    .top-in > .back-btn{display:none}
+    .brand{font-size:14.5px;gap:5px;flex:0 0 auto}
+    .brand svg{width:20px;height:20px}
+    .brand button{max-width:27vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .top-right{flex:1 1 auto;justify-content:flex-end;overflow-x:auto;
+      scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .top-right::-webkit-scrollbar{display:none}
+    .backup-btn{padding:5px 7px;font-size:11px;flex:0 0 auto;border-radius:9px}
+
+    .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;
+      background:var(--pine-deep);
+      box-shadow:0 -2px 12px rgba(20,40,32,.3);
+      padding:4px 2px calc(4px + env(safe-area-inset-bottom));
+      overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .tabbar::-webkit-scrollbar{display:none}
+    .tab{flex:1 1 0;min-width:0;background:none;border:1px solid transparent;
+      border-radius:11px;padding:5px 1px 4px;color:#CFDDD6;
+      display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1;
+      transition:background .12s, transform .08s}
+    .tab-ico{font-size:17px;line-height:1}
+    .tab-lab{font-size:9.5px;font-weight:500;white-space:nowrap;
+      max-width:100%;overflow:hidden;text-overflow:ellipsis}
+    .me-name{display:none}
+    .tab:active{transform:translateY(1px)}
+    .tab.on{color:#33280B;font-weight:700;border:1px solid #8C6C1E;
+      background:linear-gradient(180deg,#EBD9A4 0%,#D3B159 44%,#B8912F 100%);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 2px 4px rgba(0,0,0,.22)}
+    .tab.off{visibility:hidden;pointer-events:none}
+    /* 탭바에 가리지 않도록 본문 아래 여백 */
+    .wrap{padding-bottom:78px}
+    .app-copy{padding-bottom:86px}
   }
 
   /* 교회별 홈 사진: 공통 배경과 교회 사진을 분리 */
@@ -616,6 +648,12 @@ function ChurchHomeBanner({churchName, photo}){
     </div>
   </div>;
 }
+
+/* 아래쪽 탭바에 쓰는 그림표와 짧은 이름 */
+const TAB_ICON = {home:"🏠", members:"👥", att:"✔", cal:"📅",
+  visit:"🤝", pray:"🙏", team:"👤", cfg:"⚙"};
+const TAB_SHORT = {"예배 출석 체크":"출석", "출석 체크":"출석", "중보기도":"중보",
+  "우리 속 교인":"우리 속", "담당 교인":"담당", "우리 부서":"우리 부서"};
 
 const pad = n => String(n).padStart(2, "0");
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
@@ -1563,13 +1601,27 @@ function App({sb, profile, logout, churchId, leaveChurch}){
           <div className="top-right">
             {canEdit && !isLeader && <button className="backup-btn" onClick={doExport}>백업</button>}
             {isAdmin && <button className="backup-btn" onClick={()=>fileRef.current.click()}>가져오기</button>}
-            {leaveChurch && <button className="backup-btn" onClick={leaveChurch} title="다른 교회로">교회 바꾸기</button>}
-            <button className="backup-btn" onClick={logout}>{profile.name || "나"} · 로그아웃</button>
+            {leaveChurch && <button className="backup-btn" onClick={leaveChurch} title="다른 교회로">
+              교회<span className="me-name"> 바꾸기</span></button>}
+            <button className="backup-btn" onClick={logout}>
+              <span className="me-name">{profile.name || "나"} · </span>로그아웃</button>
             <input ref={fileRef} type="file" accept=".json,application/json" style={{display:"none"}}
               onChange={e=>{ if(e.target.files[0]) doImport(e.target.files[0]); e.target.value=""; }}/>
           </div>
         </div>
       </header>
+
+      {/* 휴대폰에서는 메뉴를 아래쪽 탭바로 */}
+      <nav className="tabbar" aria-label="화면 이동">
+        <button className={"tab"+(histLen>0?"":" off")} onClick={goBack}
+          aria-hidden={histLen===0} tabIndex={histLen>0?0:-1}>
+          <span className="tab-ico">‹</span><span className="tab-lab">뒤로</span></button>
+        {navItems.map(([k,l])=>(
+          <button key={k} className={"tab"+(view===k?" on":"")} onClick={()=>go(k)}>
+            <span className="tab-ico">{TAB_ICON[k] || "•"}</span>
+            <span className="tab-lab">{TAB_SHORT[l] || l}</span>
+          </button>))}
+      </nav>
 
       <div className="wrap">
         {err && <div className="err-banner">{err} <button className="btn sm ghost" onClick={loadAll}>다시 불러오기</button></div>}
