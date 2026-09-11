@@ -592,7 +592,7 @@ const currentChurchConfig = () => ({
 /* 설정을 프로그램에 적용 */
 const applyChurchConfig = (c) => {
   if(!c) return;
-  if(c.sokMode === "age" || c.sokMode === "manual") SOK_MODE = c.sokMode;
+  if(c.sokMode === "age" || c.sokMode === "manual" || c.sokMode === "area") SOK_MODE = c.sokMode;
   if(Array.isArray(c.sokList)) SOK_LIST = c.sokList;
   if(Array.isArray(c.services) && c.services.length) SERVICES = c.services;
   if(Array.isArray(c.positions) && c.positions.length) POSITIONS = c.positions;
@@ -604,11 +604,11 @@ const applyChurchConfig = (c) => {
 /* 속 개수에 맞춰 이름표 만들기 */
 const sokCount = g => (g==="여" ? SOK_F : SOK_M).length;
 /* 설정된 속 개수에 맞춘 키 목록: 남1..남n, 여1..여m */
-const sokKeys = () => SOK_MODE === "manual"
+const sokKeys = () => (SOK_MODE === "manual" || SOK_MODE === "area")
   ? SOK_LIST.map(s=>s.id)
   : [ ...SOK_M.map((_,i)=>"남"+(i+1)), ...SOK_F.map((_,i)=>"여"+(i+1)) ];
 /* 키 하나의 이름표 */
-const sokKeyLabel = k => SOK_MODE === "manual"
+const sokKeyLabel = k => (SOK_MODE === "manual" || SOK_MODE === "area")
   ? ((SOK_LIST.find(s=>s.id===k)||{}).name || "속 미지정")
   : sokLabel({g:k[0], n:Number(k.slice(1))});
 function sokOf(m){
