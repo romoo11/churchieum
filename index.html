@@ -338,10 +338,33 @@
     text-shadow:0 1px 0 rgba(255,255,255,.7)}
   @media (max-width:560px){ .mem-list{grid-template-columns:repeat(auto-fill,minmax(148px,1fr))} }
   .mem-detail-head{display:flex;gap:14px;align-items:flex-start}
-  .mem-photo-lg{width:88px;height:88px;border-radius:12px;object-fit:cover;border:1px solid var(--line);flex:none}
+  /* ── 사진이 들어가는 틀은 모두 물방울 결로 ── */
+  .photo-frame{position:relative;overflow:hidden;border-radius:13px;
+    border:1px solid rgba(34,53,92,.30);
+    background:linear-gradient(180deg,#FFFFFF 0%,#EFF3F9 46%,#DCE3EF 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95), inset 0 -2px 5px rgba(34,53,92,.12),
+      0 3px 8px rgba(34,53,92,.20)}
+  .photo-frame::after{content:"";position:absolute;inset:0;border-radius:inherit;
+    pointer-events:none;
+    background:linear-gradient(180deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,.08) 30%,
+      rgba(255,255,255,0) 52%,rgba(34,53,92,.12) 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.85), inset 0 0 0 1px rgba(255,255,255,.18)}
+  .mem-photo-lg{width:88px;height:88px;border-radius:13px;object-fit:cover;flex:none;
+    border:1px solid rgba(34,53,92,.30);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 3px 8px rgba(34,53,92,.20)}
   .photo-row{display:flex;gap:14px;align-items:flex-start;margin:4px 0 14px}
-  .photo-box{width:96px;height:96px;border-radius:12px;border:1px dashed var(--line);flex:none;
-    display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff}
+  .photo-box{width:96px;height:96px;border-radius:13px;flex:none;position:relative;
+    display:flex;align-items:center;justify-content:center;overflow:hidden;
+    border:1px dashed #B2BED4;
+    background:linear-gradient(180deg,#FFFFFF 0%,#F3F6FB 50%,#E4EAF3 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 2px 5px rgba(34,53,92,.13)}
+  .photo-box.has-photo{border:1px solid rgba(34,53,92,.30);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95), inset 0 -2px 5px rgba(34,53,92,.12),
+      0 3px 8px rgba(34,53,92,.20)}
+  .photo-box.has-photo::after{content:"";position:absolute;inset:0;border-radius:inherit;
+    pointer-events:none;
+    background:linear-gradient(180deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,.08) 30%,
+      rgba(255,255,255,0) 52%,rgba(34,53,92,.12) 100%)}
   .photo-box img{width:100%;height:100%;object-fit:cover}
   .photo-box .photo-ph{color:var(--muted);font-size:12.5px;text-align:center}
   .photo-pick{display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
@@ -422,8 +445,16 @@
   .church-home-banner{aspect-ratio:1400/787;container-type:inline-size}
   .church-home-background{display:block;width:100%;height:100%;object-fit:cover}
   .church-photo-slot{position:absolute;left:2.6%;top:18%;width:25.5%;height:59%;
-    overflow:hidden;border-radius:12px;background:rgba(248,249,245,.92);
-    border:2px solid rgba(255,255,255,.85);box-shadow:0 6px 20px rgba(24,43,60,.18)}
+    overflow:hidden;border-radius:14px;
+    border:1px solid rgba(34,53,92,.32);
+    background:linear-gradient(180deg,#FFFFFF 0%,#EFF3F9 46%,#DCE3EF 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95), inset 0 -3px 7px rgba(34,53,92,.14),
+      0 5px 14px rgba(24,43,60,.26)}
+  .church-photo-slot::after{content:"";position:absolute;inset:0;border-radius:inherit;
+    pointer-events:none;
+    background:linear-gradient(180deg,rgba(255,255,255,.32) 0%,rgba(255,255,255,.07) 30%,
+      rgba(255,255,255,0) 52%,rgba(24,43,60,.14) 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
   .church-photo-slot img{display:block;width:100%;height:100%}
   .church-home-banner .hero-text h1{font-size:clamp(18px,4.2cqw,34px);overflow-wrap:anywhere}
   .church-home-banner .hero-text p{font-size:clamp(12px,2.2cqw,15.5px)}
@@ -442,7 +473,8 @@
   .church-settings-fields{border:0;padding:0;margin:0;min-width:0}
   .church-settings-fields:disabled{opacity:.72}
   @media(max-width:640px){
-    .church-photo-slot{border-width:1px;border-radius:6px}
+    .church-photo-slot{border-radius:8px;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.9), 0 3px 8px rgba(24,43,60,.24)}
     .church-home-banner .hero-text{padding:10px 12px}
     .church-home-banner .hero-text p{line-height:1.4}
   }
@@ -773,9 +805,18 @@ function sokOf(m){
     return null;
   }
 
+  /* 메모에 속이 적혀 있으면 나이보다 먼저 따릅니다 (10속 넘는 교회도 가능) */
   const memo = m.memo || "";
-  let t = memo.match(/([0-9])\s*여선교회/); if(t) return {g:"여", n:Number(t[1])};
-  t = memo.match(/([0-9])\s*남선교회/); if(t) return {g:"남", n:Number(t[1])};
+  const fromMemo = (g) => {
+    const hits = [...memo.matchAll(new RegExp("([0-9]{1,3})\\s*" + g + "선교회", "g"))];
+    for(const h of hits){
+      const n = Number(h[1]);
+      if(n >= 1 && n <= sokCount(g)) return {g, n};   /* 설정된 속 수 안에 있을 때만 */
+    }
+    return null;
+  };
+  const memoF = fromMemo("여"); if(memoF) return memoF;
+  const memoM = fromMemo("남"); if(memoM) return memoM;
   const y = m.birth ? Number(m.birth.slice(0,4)) : 0;
   if(y){
     const ka = koAge(m.birth);
@@ -2056,7 +2097,7 @@ function MemberForm({init, onSave, onCancel}){
       <h2>{init ? "교인 정보 수정" : "새 교인 등록"}</h2>
 
       <div className="photo-row">
-        <div className="photo-box">
+        <div className={"photo-box" + (m.photo ? " has-photo" : "")}>
           {m.photo
             ? <img src={m.photo} alt="교인 사진"/>
             : <span className="photo-ph">사진 없음</span>}
