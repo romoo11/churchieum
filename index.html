@@ -921,7 +921,14 @@ const GUESTS = Array.from({length:10}, (_,i)=>({
 }));
 
 const ATT_ONLY = "ATT_ONLY";   /* 예배 출석 체크만 (성도 전체 · 교회학교 제외) */
+const CARE_ALL = "CARE_ALL";   /* 심방·긴밀 기도 전체 보기 */
+const PASTOR   = "PASTOR";     /* 교역자 — 성도·교회학교 전체 열람·수정 */
+const ELDER    = "ELDER";      /* 장로 — 성도·교회학교 전체 열람만 */
+const ROLE_SCOPES = [PASTOR, ELDER, CARE_ALL];
 const SCOPE_LIST = () => [
+  [PASTOR, "교역자 — 성도·교회학교 전체 열람·수정"],
+  [ELDER, "장로 — 성도·교회학교 전체 열람만 (수정 불가)"],
+  [CARE_ALL, "심방·긴밀 기도 전체 보기"],
   [ATT_ONLY, "예배 출석 체크만 (성도 전체 · 교회학교 제외)"],
   ["MIN", "교역자"],
   ["SAMO", "사모"],
@@ -1463,15 +1470,27 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   const [cfgVer, setCfgVer] = useState(0);       /* 설정이 바뀌면 화면 다시 그리기 */
   const isAdmin = profile.role === "admin";
   const myScopes = scopesOf(leaders, profile.id);
-  const isLeader = !isAdmin && myScopes.length > 0;             /* 속장 · 교회학교 교사 */
+  const isPastor = !isAdmin && myScopes.indexOf(PASTOR) >= 0;   /* 교역자 */
+  const isElder  = !isAdmin && myScopes.indexOf(ELDER)  >= 0;   /* 장로 */
+  /* 사람 범위로 쓰는 담당만 (역할 표시는 뺀다) */
+  const rangeScopes = myScopes.filter(k => ROLE_SCOPES.indexOf(k) < 0);
+  const isLeader = !isAdmin && !isPastor && !isElder && rangeScopes.length > 0;  /* 속장 · 교회학교 교사 */
   /* 명단에서 볼 수 있는 범위 — '예배 출석 체크만'은 명단 권한이 아니므로 뺀다 */
-  const listScopes = myScopes.filter(k => k !== ATT_ONLY);
-  const canEdit = !isLeader && (profile.role === "admin" || profile.role === "editor");
+  const listScopes = rangeScopes.filter(k => k !== ATT_ONLY);
+  const editRole = profile.role === "admin" || profile.role === "editor";
+  /* 고칠 수 있는 사람 — 장로는 아무리 권한이 있어도 열람만 */
+  const canEdit = !isElder && editRole && (isAdmin || isPastor || !isLeader);
   const canCheckAtt = canEdit || isLeader;                      /* 출석 체크 가능 */
   /* 교회학교 담당 교사인지 (부서 하나 이상 맡은 경우) */
   const isSchoolTeacher = isLeader && listScopes.some(k => k === "S_ALL" || k.indexOf("S_") === 0);
   /* 출석 체크만 맡은 분 — 다른 담당이 함께 있으면 명부도 볼 수 있음 */
   const attOnly = isLeader && listScopes.length === 0;   /* 명단 권한 없이 출석만 맡은 분 */
+  /* 심방·긴밀 기도를 전부 볼 수 있는 사람 */
+  const canSeeAllCare = isAdmin || myScopes.indexOf(CARE_ALL) >= 0;
+  /* 성도·교회학교 전체를 보는 사람 */
+  const fullView = isAdmin || isPastor || isElder;
+  /* 담당이 하나도 없는 사람 — 달력과 일반 중보기도만 */
+  const noScope = !fullView && rangeScopes.length === 0;
   /* 이 사람의 정보를 고칠 수 있는가 — 교사는 자기 담당 학생만 */
   const canEditMember = (m) => {
     if(canEdit) return true;
@@ -1485,7 +1504,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     : members;
   /* 출석 체크에서 볼 수 있는 범위 — 담당 전부 (출석 체크만 포함) */
   const attMembers = isLeader
-    ? members.filter(m => myScopes.some(k => inScope(m, k)))
+    ? members.filter(m => rangeScopes.some(k => inScope(m, k)))
     : members;
   /* 속장·교사가 담당 범위 밖이라도 볼 수 있는 사람: 담당 교인과 가족으로 이어진 분 (한 다리까지) */
   const viewMembers = useMemo(()=>{
@@ -1713,8 +1732,8 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   };
 
   const go = v => {
-    if(isLeader && (v==="visit" || v==="pray" || v==="team")) return;
-    if(attOnly && v!=="home" && v!=="att" && v!=="cal") return;
+    const allowed = navItems.some(x => x[0] === v);
+    if(!allowed) return;
     if(v !== view) pushHistory();
     setView(v); if(v==="members") setMemView({mode:"list"}); window.scrollTo(0,0);
   };
@@ -1725,14 +1744,27 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     setView("members"); setMemView({mode:"detail", id}); window.scrollTo(0,0);
   };
 
-  const navItems = attOnly
-    ? [["home","홈"],["att","예배 출석 체크"]]
-    : isLeader
-    ? [["home","홈"],
-       ["members", listScopes.every(k=>k.indexOf("S_")===0) ? "우리 부서"
-                 : listScopes.some(k=>k.indexOf("S_")===0) ? "담당 교인" : "우리 속 교인"],
-       ["att","출석 체크"],["cal","달력"]]
-    : [["home","홈"],["members","교인"],["att","출석"],["cal","달력"],["visit","심방"],["pray","중보기도"]];
+  let navItems;
+  if(noScope){
+    /* 담당이 없는 분 — 달력과 일반 중보기도만 (보기만) */
+    navItems = [["home","홈"],["cal","달력"],["pray","중보기도"]];
+  } else if(attOnly){
+    navItems = [["home","홈"],["att","예배 출석 체크"]];
+  } else if(isElder){
+    navItems = [["home","홈"],["members","교인"],["cal","달력"],["pray","중보기도"]];
+  } else if(isLeader){
+    navItems = [["home","홈"],
+      ["members", listScopes.every(k=>k.indexOf("S_")===0) ? "우리 부서"
+                : listScopes.some(k=>k.indexOf("S_")===0) ? "담당 교인" : "우리 속 교인"],
+      ["att","출석 체크"],["cal","달력"],["pray","중보기도"]];
+  } else {
+    navItems = [["home","홈"],["members","교인"],["att","출석"],["cal","달력"],["pray","중보기도"]];
+  }
+  /* 심방 메뉴는 전체 열람이 켜진 사람에게만 */
+  if(canSeeAllCare && !noScope){
+    const at = navItems.findIndex(x=>x[0]==="pray");
+    navItems.splice(at >= 0 ? at : navItems.length, 0, ["visit","심방"]);
+  }
   if(isAdmin){ navItems.push(["team","사용자"]); navItems.push(["cfg","설정"]); }
 
   if(!entered) return <Gate churchName={churchName} onEnter={()=>setEntered(true)}/>;
@@ -1832,8 +1864,8 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             setMemView={v=>{ pushHistory({view:"members", memView}); setMemView(v); }}
             canEdit={canEdit || canEditMember(viewMembers.find(x=>x.id===memView.id))}
             canDelete={canEdit}
-            allMembers={viewMembers} openMember={openMember} limited={isLeader}
-            canPray={isLeader && !attOnly && myMembers.some(x=>x.id===memView.id)}
+            allMembers={viewMembers} openMember={openMember} limited={!canSeeAllCare}
+            canPray={!attOnly && !isElder && (canEdit || myMembers.some(x=>x.id===memView.id))}
             meName={profile.name || profile.email} meId={profile.id}
             outside={isLeader && !myMembers.some(x=>x.id===memView.id)}
             update={fn=>updateMember(memView.id, fn)}
@@ -1847,16 +1879,18 @@ function App({sb, profile, logout, churchId, leaveChurch}){
         )}
         {view==="att" && <Attendance members={attMembers} att={att} saveAtt={saveAtt} canEdit={canCheckAtt}
           schoolClasses={schoolClasses} specials={specials} saveSpecials={saveSpecials} isAdmin={isAdmin || canEdit}/>}
-        {view==="visit" && (isLeader
+        {view==="visit" && (!canSeeAllCare
           ? <p className="empty">심방 기록은 목회자와 관리자만 볼 수 있습니다.</p>
           : <Visits members={members} update={updateMember} openMember={openMember} canEdit={canEdit}
               meName={profile.name || profile.email} meId={profile.id}/>)}
         {view==="cal" && <Calendar members={members} events={events} saveEvents={saveEvents}
-          canEdit={canEdit} openMember={openMember}/>}
-        {view==="pray" && (isLeader
-          ? <p className="empty">중보기도 전체 목록은 목회자와 관리자만 볼 수 있습니다. 담당 교인의 기도 제목은 그 교인 화면에서 보실 수 있습니다.</p>
-          : <Prayers members={members} update={updateMember} openMember={openMember} canEdit={canEdit}
-              meName={profile.name || profile.email} meId={profile.id}/>)}
+          canEdit={isAdmin || isPastor} openMember={openMember}
+          openable={!noScope && !attOnly}/>}
+        {view==="pray" &&
+          <Prayers members={members} update={updateMember} openMember={openMember}
+            canEdit={canEdit && !noScope} seeSecret={canSeeAllCare}
+            openable={!noScope && !attOnly}
+            meName={profile.name || profile.email} meId={profile.id}/>}
         {view==="team" && isAdmin && <Team sb={sb} me={profile} leaders={leaders} saveLeaders={saveLeaders}
           churchId={churchId} joinCode={joinCode}/>}
         {view==="cfg" && isAdmin && <ChurchConfig key={cfgVer} saveConfig={saveConfig} churchName={churchName}
@@ -1942,12 +1976,15 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
 
       <div className="panel">
         <h2>사용 중인 구성원 <span className="muted small">{active.length}명</span></h2>
-        <p className="small muted"><b>담당</b>을 정하면 그분은 그 범위만 보게 됩니다. <b>없음</b>이면 전체를 봅니다.<br/>
-          · <b>속 하나</b> — 그 속 교인의 신상 보기와 출석 체크 (다른 속·심방은 안 보임)<br/>
-          · <b>속 전체 / 교회학교 전체</b> — 어른 전부 또는 유치부~청년부 전부. 속회장·교회학교 부장께 알맞습니다<br/>
-          · <b>교회학교 부서</b> — 담당 부서 학생의 정보는 직접 수정도 됩니다<br/>
-          · <b>예배 출석 체크만</b> — 출석만 체크하고 교인 신상은 전혀 못 봅니다. 예배 안내위원께 알맞습니다<br/>
-          한 사람에게 <b>여러 담당</b>을 줄 수도 있습니다(예: 중고등부 + 여자 7속).</p>
+        <p className="small muted"><b>담당</b>을 정하면 그 사람이 무엇을 볼지 결정됩니다.
+          담당을 <b>안 정하면</b> 달력과 일반 중보기도만 보게 됩니다(고치기는 안 됨).<br/>
+          · <b>교역자</b> — 성도와 교회학교 전체를 보고 고칠 수 있습니다<br/>
+          · <b>장로</b> — 성도와 교회학교 전체를 <b>보기만</b> 합니다(고치기·출석 체크 안 됨)<br/>
+          · <b>심방·긴밀 기도 전체 보기</b> — 이것을 함께 켜 준 사람만 심방 메뉴와 긴밀 기도를 봅니다.
+            켜지 않아도 자기가 심방한 기록은 남기고 볼 수 있습니다<br/>
+          · <b>속 하나 / 속 전체 / 교회학교 부서</b> — 그 범위 교인만 보고 출석을 체크합니다<br/>
+          · <b>예배 출석 체크만</b> — 출석만 체크하고 교인 신상은 전혀 못 봅니다<br/>
+          한 사람에게 <b>여러 담당</b>을 줄 수 있습니다(예: 교역자 + 심방 전체 보기).</p>
         {rows!==null &&
           <div className="tbl-wrap"><table>
             <thead><tr><th>이름</th><th>이메일</th><th>권한</th><th>담당 속(속장)</th><th></th></tr></thead>
@@ -3266,7 +3303,7 @@ const EVENT_KINDS = [
 const kindOf = k => EVENT_KINDS.find(x=>x.key===k) || EVENT_KINDS[4];
 const ymd = d => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
 
-function Calendar({members, events, saveEvents, canEdit, openMember}){
+function Calendar({members, events, saveEvents, canEdit, openMember, openable}){
   const today = new Date();
   const [cur, setCur] = useState({y: today.getFullYear(), m: today.getMonth()});
   const [sel, setSel] = useState(ymd(today));
@@ -3438,7 +3475,8 @@ function Calendar({members, events, saveEvents, canEdit, openMember}){
                       {m.birth && " · " + Number(m.birth.slice(0,4)) + "년생 (" + (new Date().getFullYear()-Number(m.birth.slice(0,4))+1) + "세)"}</span>
                     {m.phone && <div className="muted small">{m.phone}</div>}
                   </div>
-                  <button className="btn sm ghost" onClick={()=>openMember(m.id)}>기록 보기</button>
+                  {openable !== false &&
+                    <button className="btn sm ghost" onClick={()=>openMember(m.id)}>기록 보기</button>}
                 </div>))}
             </React.Fragment>}
       </div>
@@ -3449,7 +3487,8 @@ function Calendar({members, events, saveEvents, canEdit, openMember}){
           ? <p className="empty" style={{marginTop:8}}>이 달에 생일이신 분이 없습니다.</p>
           : <div className="mem-list" style={{marginTop:8}}>
               {monthBirthdays.map(({day,m})=>(
-                <button key={m.id} className="bd-card" onClick={()=>openMember(m.id)}>
+                <button key={m.id} className="bd-card"
+                  onClick={()=>{ if(openable !== false) openMember(m.id); }}>
                   <span className="bd-day">{day}일</span>
                   <span className="bd-name">{m.name}</span>
                   <span className="muted small">{m.position}</span>
@@ -3522,7 +3561,7 @@ function Visits({members, update, openMember, canEdit, meName, meId}){
 }
 
 /* ───────── 중보기도 전체 ───────── */
-function Prayers({members, update, openMember, canEdit, meName, meId}){
+function Prayers({members, update, openMember, canEdit, seeSecret, openable, meName, meId}){
   const [filter, setFilter] = useState("open");
   const [kind, setKind] = useState("all");     /* all | normal | secret */
   const [memId, setMemId] = useState("");
@@ -3532,6 +3571,7 @@ function Prayers({members, update, openMember, canEdit, meName, meId}){
   const all = members.flatMap(m => (m.prayers||[]).map(p=>({...p, memId:m.id, memName:m.name})))
     .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   const list = all.filter(p => (filter==="all" || p.status===filter)
+    && (seeSecret || !p.secret)
     && (kind==="all" || (kind==="secret" ? !!p.secret : !p.secret)));
   const openN = all.filter(p=>p.status==="open").length;
 
@@ -3583,7 +3623,7 @@ function Prayers({members, update, openMember, canEdit, meName, meId}){
                 <td style={{whiteSpace:"nowrap"}}>{p.date}
                   {p.by && <div className="muted small">{p.by}</div>}</td>
                 <td className="nw"><button className="btn sm ghost" style={{whiteSpace:"nowrap"}}
-                  onClick={()=>openMember(p.memId)}>{p.memName}</button></td>
+                  onClick={()=>{ if(openable !== false) openMember(p.memId); }}>{p.memName}</button></td>
                 <td style={{whiteSpace:"pre-wrap"}}>
                   {p.secret && <span className="chip secret" style={{marginRight:6}}>긴밀</span>}
                   {p.request}</td>
