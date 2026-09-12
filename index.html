@@ -502,6 +502,11 @@
   /* 교회별 홈 사진: 공통 배경과 교회 사진을 분리 */
   .church-home-banner{aspect-ratio:1400/787;container-type:inline-size}
   .church-home-background{display:block;width:100%;height:100%;object-fit:cover}
+  .church-photo-slot.cut-out{background:none;border:none;box-shadow:none}
+  .church-photo-slot.cut-out::after{display:none}
+  .cut-white{display:flex;align-items:center;gap:8px;margin:10px 0 2px;
+    font-size:14px;color:var(--ink);cursor:pointer}
+  .cut-white input{width:17px;height:17px;accent-color:var(--pine)}
   .church-photo-slot{position:absolute;left:2.6%;top:18%;width:25.5%;height:59%;
     overflow:hidden;border-radius:14px;
     border:1px solid rgba(34,53,92,.32);
@@ -588,12 +593,12 @@ function normalizeChurchHomePhoto(value){
   if(value === null || value === undefined) return null;
   if(typeof value !== "object" || value.version !== 1 ||
      typeof value.dataUrl !== "string" || value.dataUrl.length > CHURCH_HOME_PHOTO_LIMIT ||
-     !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(value.dataUrl)){
+     !/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(value.dataUrl)){
     throw new Error("저장된 교회 사진 형식을 확인할 수 없습니다.");
   }
   const position = n => Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 50;
   return {version:1, dataUrl:value.dataUrl, fit:value.fit === "cover" ? "cover" : "contain",
-          x:position(value.x), y:position(value.y)};
+          x:position(value.x), y:position(value.y), cut: value.cut === true};
 }
 
 function parseChurchHomePhoto(rows){
@@ -601,7 +606,44 @@ function parseChurchHomePhoto(rows){
   return row ? normalizeChurchHomePhoto(JSON.parse(row.value)) : null;
 }
 
-function readChurchHomePhoto(file){
+/* 가장자리에서 번져 들어가며 흰 배경만 지웁니다 (그림 안쪽 흰색은 남김) */
+function eraseWhiteBackground(ctx, w, h){
+  const im = ctx.getImageData(0, 0, w, h);
+  const d = im.data;
+  const near = i => d[i] > 228 && d[i+1] > 228 && d[i+2] > 228;
+  const seen = new Uint8Array(w * h);
+  const stack = [];
+  for(let x = 0; x < w; x++){ stack.push(x); stack.push((h-1)*w + x); }
+  for(let y = 0; y < h; y++){ stack.push(y*w); stack.push(y*w + w - 1); }
+  while(stack.length){
+    const p = stack.pop();
+    if(p < 0 || p >= w*h || seen[p]) continue;
+    const i = p * 4;
+    if(!near(i)) continue;
+    seen[p] = 1; d[i+3] = 0;
+    const x = p % w, y = (p - x) / w;
+    if(x > 0) stack.push(p - 1);
+    if(x < w-1) stack.push(p + 1);
+    if(y > 0) stack.push(p - w);
+    if(y < h-1) stack.push(p + w);
+  }
+  /* 가장자리 톱니를 부드럽게 */
+  for(let p = 0; p < w*h; p++){
+    if(seen[p]) continue;
+    const i = p * 4;
+    if(!near(i)) continue;
+    const x = p % w, y = (p - x) / w;
+    let open = 0;
+    if(x > 0 && seen[p-1]) open++;
+    if(x < w-1 && seen[p+1]) open++;
+    if(y > 0 && seen[p-w]) open++;
+    if(y < h-1 && seen[p+w]) open++;
+    if(open) d[i+3] = Math.round(255 * (1 - open / 4));
+  }
+  ctx.putImageData(im, 0, 0);
+}
+
+function readChurchHomePhoto(file, cut){
   return new Promise((resolve, reject) => {
     if(!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)){
       reject(new Error("JPG, PNG, WebP 사진을 선택해 주세요. HEIC 사진은 JPG로 바꾼 뒤 올려 주세요.")); return;
@@ -622,16 +664,23 @@ function readChurchHomePhoto(file){
         const ctx = canvas.getContext("2d");
         if(!ctx) throw new Error("이 브라우저에서 사진을 처리할 수 없습니다.");
         let dataUrl = "";
-        for(let attempt = 0; attempt < 5; attempt++){
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        for(let attempt = 0; attempt < 7; attempt++){
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          if(!cut){ ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height); }
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          dataUrl = canvas.toDataURL("image/jpeg", Math.max(.55, .85 - attempt * .08));
+          if(cut){
+            eraseWhiteBackground(ctx, canvas.width, canvas.height);
+            dataUrl = canvas.toDataURL("image/png");
+          } else {
+            dataUrl = canvas.toDataURL("image/jpeg", Math.max(.55, .85 - attempt * .08));
+          }
           if(dataUrl.length <= CHURCH_HOME_PHOTO_LIMIT) break;
-          canvas.width = Math.max(1, Math.round(canvas.width * .8));
-          canvas.height = Math.max(1, Math.round(canvas.height * .8));
+          canvas.width = Math.max(1, Math.round(canvas.width * (cut ? .75 : .8)));
+          canvas.height = Math.max(1, Math.round(canvas.height * (cut ? .75 : .8)));
         }
-        resolve(normalizeChurchHomePhoto({version:1, dataUrl, fit:"contain", x:50, y:50}));
+        if(dataUrl.length > CHURCH_HOME_PHOTO_LIMIT)
+          throw new Error("배경을 지운 사진이 너무 큽니다. 조금 작은 사진으로 올려 주세요.");
+        resolve(normalizeChurchHomePhoto({version:1, dataUrl, fit:"contain", x:50, y:50, cut: !!cut}));
       }catch(e){ reject(e); }
       finally{ URL.revokeObjectURL(url); }
     };
@@ -662,7 +711,7 @@ function ChurchHomeBanner({churchName, photo}){
   const custom = photo && !failed;
   return <div className="hero church-home-banner">
     <img className="church-home-background" src={CHURCH_HOME_BACKGROUND} alt="" width="1400" height="787"/>
-    <div className="church-photo-slot">
+    <div className={"church-photo-slot" + (custom && photo.cut ? " cut-out" : "")}>
       <img src={custom ? photo.dataUrl : CHURCH_HOME_DEFAULT_PHOTO}
         alt={custom ? `${churchName} 교회 사진` : "공통 교회 이미지"}
         style={{objectFit:custom ? photo.fit : "cover", objectPosition:custom ? `${photo.x}% ${photo.y}%` : "center"}}
@@ -3031,17 +3080,21 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
   const saveLock = useRef(false);
   const [photoDraft, setPhotoDraft] = useState(homePhoto);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [cutWhite, setCutWhite] = useState(!!(homePhoto && homePhoto.cut));
+  const lastFile = useRef(null);
   const [photoError, setPhotoError] = useState("");
   const [photoMessage, setPhotoMessage] = useState("");
   const photoInput = useRef(null);
   const photoReadToken = useRef(0);
   useEffect(() => () => { photoReadToken.current++; }, []);
-  const choosePhoto = async file => {
+  const choosePhoto = async (file, cutOpt) => {
     if(!file) return;
+    lastFile.current = file;
+    const cut = cutOpt === undefined ? cutWhite : cutOpt;
     const token = ++photoReadToken.current;
     setPhotoBusy(true); setPhotoError(""); setPhotoMessage(""); setMsg("");
     try{
-      const next = await readChurchHomePhoto(file);
+      const next = await readChurchHomePhoto(file, cut);
       if(token !== photoReadToken.current) return;
       setPhotoDraft(next); setPhotoMessage("미리보기를 확인한 뒤 설정 저장을 눌러 주세요.");
     }catch(e){ if(token === photoReadToken.current) setPhotoError(errMsg(e)); }
@@ -3136,6 +3189,16 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
             aria-label="홈 화면 교회 사진 선택" style={{display:"none"}}
             onChange={e => { const file = e.target.files[0]; e.target.value = ""; choosePhoto(file); }}/>
         </div>
+        <label className="cut-white">
+          <input type="checkbox" checked={cutWhite} disabled={photoBusy}
+            onChange={e => {
+              const on = e.target.checked;
+              setCutWhite(on);
+              if(lastFile.current) choosePhoto(lastFile.current, on);
+              else setPhotoMessage(on ? "사진을 고르면 흰 배경을 지웁니다." : "");
+            }}/>
+          <span>흰 배경 지우기 <span className="muted small">— 사진 가장자리의 흰 부분을 투명하게 만듭니다</span></span>
+        </label>
         <p className="muted">JPG·PNG·WebP, 15MB 이하 · 사진은 저장하기 좋은 크기로 자동 조정됩니다.</p>
         {photoDraft && <React.Fragment>
           <div className="church-photo-options" role="group" aria-label="교회 사진 표시 방법">
