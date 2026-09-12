@@ -67,6 +67,17 @@
   .cls-head.none .nm{color:#63708A}
   .chip.secret{background:#7E2F20;color:#fff}
   td.nw, th.nw{white-space:nowrap}
+  .rw{display:inline-flex;border:1px solid #BAC5D9;border-radius:9px;overflow:hidden;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+  .rw-b{border:none;background:linear-gradient(180deg,#FFFFFF,#E9EDF4);color:#5C6B85;
+    font-size:11.5px;font-weight:600;padding:3px 9px;line-height:1.4}
+  .rw-b+.rw-b{border-left:1px solid #BAC5D9}
+  .rw-b.on{background:linear-gradient(180deg,#EBD9A4 0%,#D3B159 44%,#B8912F 100%);
+    color:#33280B;box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+  .able{margin-top:5px;white-space:normal;max-width:280px;line-height:1.5}
+  .able span{display:block;font-size:11.5px}
+  .able-yes{color:var(--pine)}
+  .able-no{color:#8A6A2E}
   .scope-col{min-width:230px}
   .scope-row{display:flex;align-items:center;gap:5px;margin-bottom:5px}
   .scope-row .chip{white-space:nowrap}
@@ -978,8 +989,8 @@ const PASTOR   = "PASTOR";     /* 교역자 — 성도·교회학교 전체 열�
 const ELDER    = "ELDER";      /* 장로 — 성도·교회학교 전체 열람만 */
 const ROLE_SCOPES = [PASTOR, ELDER, CARE_ALL];
 const SCOPE_LIST = () => [
-  [PASTOR, "교역자 — 성도·교회학교 전체 열람·수정"],
-  [ELDER, "장로 — 성도·교회학교 전체 열람만 (수정 불가)"],
+  [PASTOR, "교역자 (성도·교회학교 전체)"],
+  [ELDER, "장로 (성도·교회학교 전체)"],
   [CARE_ALL, "심방·긴밀 기도 전체 보기"],
   [ATT_ONLY, "예배 출석 체크만 (성도 전체 · 교회학교 제외)"],
   ["SOK_ALL", "속 전체 (남·여 모든 속)"],
@@ -996,6 +1007,17 @@ const scopeLabel = k => {
   return f ? f[1] : (LEGACY_SCOPE[k] || "편성 없음");
 };
 /* 한 사람의 담당 목록 (예전 방식인 문자열 하나도 그대로 읽힘) */
+/* 담당 하나는 "키" 또는 "키:w"(수정) / "키:r"(열람) 로 적힙니다.
+   예전 자료는 표시가 없으니, 그때는 계정 권한을 따릅니다. */
+const entKey  = e => String(e).split(":")[0];
+const entMode = e => { const p = String(e).split(":"); return p[1] === "w" ? "w" : p[1] === "r" ? "r" : ""; };
+const entIsW  = (e, oldRole) => {
+  const m = entMode(e);
+  if(m) return m === "w";
+  return oldRole === "editor" || oldRole === "admin";   /* 예전 방식 */
+};
+const withMode = (e, w) => entKey(e) + (w ? ":w" : ":r");
+
 const scopesOf = (leaders, id) => {
   const v = (leaders||{})[id];
   if(!v) return [];
@@ -1014,6 +1036,7 @@ const sokSideOf = (key) => {
 };
 
 const inScope = (m, k) => {
+  if(k === PASTOR || k === ELDER) return true;        /* 성도·교회학교 전체 */
   const sk = scopeKeyOf(m);
   if(k === ATT_ONLY)  return sk.indexOf("S_") !== 0;                  /* 교역자·어른 전부, 교회학교 제외 */
   if(k === "SOK_ALL") return sk === "MIN" || sk === "SAMO" || (sk !== "zz" && sk.indexOf("S_") !== 0);
@@ -1031,7 +1054,7 @@ const schoolDeptOf = m => {
   return SCHOOL_DEPTS.find(s => a >= s.min && a <= s.max) || null;
 };
 
-const ROLE_LABEL = {admin:"관리자", editor:"수정 가능", viewer:"열람만", pending:"승인 대기"};
+const ROLE_LABEL = {admin:"관리자", editor:"구성원", viewer:"구성원", pending:"승인 대기"};
 
 const emptyMember = () => ({
   id: uid(), name:"", birth:"", phone:"", address:"", position:"성도", gender:"", memo:"", photo:"",
@@ -1538,50 +1561,46 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   const [joinCode, setJoinCode] = useState("");
   const [cfgVer, setCfgVer] = useState(0);       /* 설정이 바뀌면 화면 다시 그리기 */
   const isAdmin = profile.role === "admin";
-  const myScopes = scopesOf(leaders, profile.id);
-  const isPastor = !isAdmin && myScopes.indexOf(PASTOR) >= 0;   /* 교역자 */
-  const isElder  = !isAdmin && myScopes.indexOf(ELDER)  >= 0;   /* 장로 */
-  /* 사람 범위로 쓰는 담당만 (역할 표시는 뺀다) */
-  const rangeScopes = myScopes.filter(k => ROLE_SCOPES.indexOf(k) < 0);
-  const isLeader = !isAdmin && !isPastor && !isElder && rangeScopes.length > 0;  /* 속장 · 교회학교 교사 */
-  /* 장로가 속장을 겸할 때 — 보기는 전체, 체크는 자기 담당만 */
-  const elderScopes = isElder ? rangeScopes : [];
-  /* 명단에서 볼 수 있는 범위 — '예배 출석 체크만'은 명단 권한이 아니므로 뺀다 */
-  const listScopes = rangeScopes.filter(k => k !== ATT_ONLY);
-  const editRole = profile.role === "admin" || profile.role === "editor";
-  /* 고칠 수 있는 사람 — 장로는 아무리 권한이 있어도 열람만 */
-  const canEdit = !isElder && editRole && (isAdmin || isPastor || !isLeader);
-  const canCheckAtt = canEdit || isLeader;                      /* 출석 체크 가능 */
-  /* 교회학교 담당 교사인지 (부서 하나 이상 맡은 경우) */
-  const isSchoolTeacher = isLeader && listScopes.some(k => k === "S_ALL" || k.indexOf("S_") === 0);
-  /* 출석 체크만 맡은 분 — 다른 담당이 함께 있으면 명부도 볼 수 있음 */
-  const attOnly = isLeader && listScopes.length === 0;   /* 명단 권한 없이 출석만 맡은 분 */
-  /* 심방·긴밀 기도를 전부 볼 수 있는 사람 */
-  const canSeeAllCare = isAdmin || myScopes.indexOf(CARE_ALL) >= 0;
+  const myEnts = scopesOf(leaders, profile.id);                 /* ["ELDER:r","여3:w"] 같은 목록 */
+  const oldRole = profile.role;                                 /* 예전 자료를 읽을 때만 씁니다 */
+  const isW = e => entIsW(e, oldRole);
+
+  /* 사람 범위로 쓰는 담당만 (심방 열람 표시는 뺀다) */
+  const rangeEnts = myEnts.filter(e => entKey(e) !== CARE_ALL);
+  const listEnts  = rangeEnts.filter(e => entKey(e) !== ATT_ONLY);
+  const wideEnts  = rangeEnts.filter(e => entKey(e) === PASTOR || entKey(e) === ELDER);
+
+  /* 심방·긴밀 기도 전체 보기 */
+  const canSeeAllCare = isAdmin || myEnts.some(e => entKey(e) === CARE_ALL);
   /* 성도·교회학교 전체를 보는 사람 */
-  const fullView = isAdmin || isPastor || isElder;
+  const fullView = isAdmin || wideEnts.length > 0;
   /* 담당이 하나도 없는 사람 — 달력과 일반 중보기도만 */
-  const noScope = !fullView && rangeScopes.length === 0;
+  const noScope = !fullView && rangeEnts.length === 0;
+  /* 명단 없이 출석만 맡은 분 */
+  const attOnly = !isAdmin && !fullView && rangeEnts.length > 0 && listEnts.length === 0;
+  /* 담당이 있어 범위가 좁은 사람 */
+  const isLeader = !isAdmin && !fullView && rangeEnts.length > 0;
+
+  /* 이 교인을 볼 수 있는가 / 고칠 수 있는가 */
+  const canViewM = m => isAdmin || listEnts.some(e => inScope(m, entKey(e)));
+  const canWriteM = m => isAdmin || listEnts.some(e => isW(e) && inScope(m, entKey(e)));
+  /* 출석 체크는 '수정'으로 준 담당 안에서만 (출석 체크만 담당 포함) */
+  const canCheckMember = m => isAdmin || rangeEnts.some(e => isW(e) && inScope(m, entKey(e)));
+
+  /* 화면 전체에 쓰는 큰 스위치 — 교역자에게 수정으로 준 경우 전체 편집 */
+  const canEdit = isAdmin || wideEnts.some(e => entKey(e) === PASTOR && isW(e));
+  const canCheckAtt = isAdmin || rangeEnts.some(isW);
+  const isSchoolTeacher = listEnts.some(e => { const k = entKey(e); return k === "S_ALL" || k.indexOf("S_") === 0; });
+
+  /* 속장은 자기 담당만, 전체 담당이면 모두 */
+  const myMembers = fullView ? members : members.filter(canViewM);
+  const attMembers = fullView ? members
+    : members.filter(m => rangeEnts.some(e => inScope(m, entKey(e))));
+
   /* 이 사람의 정보를 고칠 수 있는가 — 교사는 자기 담당 학생만 */
   const canEditMember = (m) => {
     if(canEdit) return true;
-    if(!m || !isSchoolTeacher) return false;
-    if(!schoolDeptOf(m)) return false;                          /* 어른은 못 고침 */
-    return listScopes.some(k => inScope(m, k));                 /* 담당 부서 학생만 */
-  };
-  /* 속장은 자기 속(또는 담당 부서) 사람만 보임 */
-  const myMembers = isLeader
-    ? members.filter(m => listScopes.some(k => inScope(m, k)))
-    : members;
-  /* 출석 체크에서 볼 수 있는 범위 — 담당 전부 (출석 체크만 포함) */
-  const attMembers = isLeader
-    ? members.filter(m => rangeScopes.some(k => inScope(m, k)))
-    : members;
-  /* 이 사람이 출석을 체크해도 되는 교인인지 */
-  const canCheckMember = (m) => {
-    if(isAdmin || isPastor) return true;
-    if(isElder) return elderScopes.some(k => inScope(m, k));   /* 겸직한 담당만 */
-    return canCheckAtt;
+    return !!m && canWriteM(m);        /* '수정'으로 받은 담당 범위 안이면 고칠 수 있습니다 */
   };
   /* 속장·교사가 담당 범위 밖이라도 볼 수 있는 사람: 담당 교인과 가족으로 이어진 분 (한 다리까지) */
   const viewMembers = useMemo(()=>{
@@ -1823,21 +1842,20 @@ function App({sb, profile, logout, churchId, leaveChurch}){
 
   let navItems;
   if(noScope){
-    /* 담당이 없는 분 — 달력과 일반 중보기도만 (보기만) */
     navItems = [["home","홈"],["cal","달력"],["pray","중보기도"]];
   } else if(attOnly){
     navItems = [["home","홈"],["att","예배 출석 체크"]];
-  } else if(isElder){
+  } else if(fullView && !isAdmin){
     navItems = [["home","홈"],["members","교인"],["att","출석"],["cal","달력"],["pray","중보기도"]];
   } else if(isLeader){
+    const keys = listEnts.map(entKey);
     navItems = [["home","홈"],
-      ["members", listScopes.every(k=>k.indexOf("S_")===0) ? "우리 부서"
-                : listScopes.some(k=>k.indexOf("S_")===0) ? "담당 교인" : "우리 속 교인"],
+      ["members", keys.every(k=>k.indexOf("S_")===0) ? "우리 부서"
+                : keys.some(k=>k.indexOf("S_")===0) ? "담당 교인" : "우리 속 교인"],
       ["att","출석 체크"],["cal","달력"],["pray","중보기도"]];
   } else {
     navItems = [["home","홈"],["members","교인"],["att","출석"],["cal","달력"],["pray","중보기도"]];
   }
-  /* 심방 메뉴는 전체 열람이 켜진 사람에게만 */
   if(canSeeAllCare && !noScope){
     const at = navItems.findIndex(x=>x[0]==="pray");
     navItems.splice(at >= 0 ? at : navItems.length, 0, ["visit","심방"]);
@@ -1908,11 +1926,11 @@ function App({sb, profile, logout, churchId, leaveChurch}){
         {err && <div className="err-banner">{err} <button className="btn sm ghost" onClick={loadAll}>다시 불러오기</button></div>}
         {!loaded ? <div className="panel empty">기록을 불러오는 중…</div> : <React.Fragment>
         {isLeader && <div className="panel" style={{padding:"12px 16px",marginBottom:12}}>
-          <b>{myScopes.map(scopeLabel).join(" · ")}</b> 담당으로 접속 중입니다.
+          <b>{myEnts.map(e => scopeLabel(entKey(e)) + (isW(e) ? " (수정)" : " (열람)")).join(" · ")}</b> 담당으로 접속 중입니다.
           <span className="muted small">
             {attOnly
               ? ` · 성도 ${attMembers.length}명의 예배 출석만 체크하실 수 있습니다. 교인 신상은 보이지 않습니다.`
-              : myScopes.includes(ATT_ONLY)
+              : myEnts.some(e => entKey(e) === ATT_ONLY)
               ? ` · 예배 출석은 ${attMembers.length}명 전체를 체크하시고, 교인 명단은 담당 ${myMembers.length}명만 보입니다.`
               : ` · ${myMembers.length}명의 신상을 보고 출석을 체크하실 수 있습니다.`}
             {isSchoolTeacher && " 담당 부서 학생의 정보는 직접 수정하실 수 있습니다."}</span>
@@ -1925,7 +1943,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             setMemView={v=>{ pushHistory({view:"members", memView:{mode:"list"}}); setMemView(v); }} canEdit={canEdit}
             schoolClasses={schoolClasses} saveClasses={saveClasses}
             canEditClass={(deptKey)=> canEdit ||
-              (isSchoolTeacher && listScopes.some(k => k==="S_ALL" || k==="S_"+deptKey))}/> :
+              listEnts.some(e => isW(e) && (entKey(e)==="S_ALL" || entKey(e)==="S_"+deptKey))}/> :
           memView.mode==="form" && memView.id && !canEditMember(byId(memView.id))
             ? <div className="panel empty">이 교인의 정보는 수정할 수 없습니다.
                 <div style={{marginTop:10}}><button className="btn sm" onClick={()=>setMemView({mode:"detail", id:memView.id})}>돌아가기</button></div>
@@ -1942,7 +1960,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             canEdit={canEdit || canEditMember(viewMembers.find(x=>x.id===memView.id))}
             canDelete={canEdit}
             allMembers={viewMembers} openMember={openMember} limited={!canSeeAllCare}
-            canPray={!attOnly && !isElder && (canEdit || myMembers.some(x=>x.id===memView.id))}
+            canPray={!attOnly && (canEdit || canWriteM(memView && byId(memView.id)))}
             meName={profile.name || profile.email} meId={profile.id}
             outside={isLeader && !myMembers.some(x=>x.id===memView.id)}
             update={fn=>updateMember(memView.id, fn)}
@@ -1955,7 +1973,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             }}/>
         )}
         {view==="att" && <Attendance members={attMembers} att={att} saveAtt={saveAtt}
-          canEdit={canCheckAtt || (isElder && elderScopes.length > 0)}
+          canEdit={canCheckAtt}
           canCheckMember={canCheckMember}
           schoolClasses={schoolClasses} specials={specials} saveSpecials={saveSpecials} isAdmin={isAdmin || canEdit}/>}
         {view==="visit" && (!canSeeAllCare
@@ -1963,7 +1981,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
           : <Visits members={members} update={updateMember} openMember={openMember} canEdit={canEdit}
               meName={profile.name || profile.email} meId={profile.id}/>)}
         {view==="cal" && <Calendar members={members} events={events} saveEvents={saveEvents}
-          canEdit={isAdmin || isPastor} openMember={openMember}
+          canEdit={canEdit} openMember={openMember}
           openable={!noScope && !attOnly}/>}
         {view==="pray" &&
           <Prayers members={members} update={updateMember} openMember={openMember}
@@ -1988,6 +2006,42 @@ function App({sb, profile, logout, churchId, leaveChurch}){
 }
 
 /* ───────── 사용자(승인) 관리 ───────── */
+/* 담당 목록을 보고 '실제로 할 수 있는 일'을 한 줄로 풀어 줍니다 */
+function abilityOf(role, ents){
+  if(role === "admin") return {can:"모든 기능", cant:""};
+  if(role === "pending") return {can:"", cant:"승인을 기다리는 중입니다"};
+  const es = ents || [];
+  const key = e => entKey(e);
+  const w   = e => entIsW(e, role);
+  const wide = es.filter(e => key(e) === PASTOR || key(e) === ELDER);
+  const care = es.some(e => key(e) === CARE_ALL);
+  const range = es.filter(e => key(e) !== CARE_ALL);
+  const list  = range.filter(e => key(e) !== ATT_ONLY && key(e) !== PASTOR && key(e) !== ELDER);
+  const can = [], cant = [];
+
+  if(!range.length){ 
+    return {can:"달력·일반 중보기도 보기", cant:"교인 명부 못 봄"};
+  }
+  if(wide.length) can.push("성도·교회학교 전체 보기");
+  if(list.length) can.push(list.map(e => scopeLabel(key(e))).join(", ") + " 보기");
+  if(!wide.length && !list.length) can.push("출석 명단만 보기");
+
+  const wr = range.filter(w);
+  if(wr.some(e => key(e) === PASTOR)) can.push("교인 신상 수정(전체) · 출석 체크(전체)");
+  else {
+    const wl = wr.filter(e => key(e) !== ATT_ONLY);
+    if(wl.length){
+      const nm = wl.map(e => key(e) === ELDER ? "전체" : scopeLabel(key(e))).join(", ");
+      can.push("교인 신상 수정(" + nm + ") · 출석 체크(" + nm + ")");
+    }
+    if(wr.some(e => key(e) === ATT_ONLY)) can.push("출석 체크(성도 전체)");
+    if(!wr.length) cant.push("고치기 안 됨 · 출석 체크 안 됨 (모두 열람으로 주셨습니다)");
+  }
+  if(care) can.push("심방·긴밀 기도 전체 보기");
+  else if(list.length || wide.length) cant.push("남이 쓴 심방 기록 못 봄");
+  return {can: can.join(" · "), cant: cant.join(" · ")};
+}
+
 function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
@@ -2045,8 +2099,7 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
                 <td>{r.email}</td>
                 <td>{(r.created_at||"").slice(0,10)}</td>
                 <td style={{whiteSpace:"nowrap"}}>
-                  <button className="btn sm ghost" onClick={()=>setRole(r.id,"viewer")}>열람 허용</button>{" "}
-                  <button className="btn sm gold" onClick={()=>setRole(r.id,"editor")}>수정 허용</button>{" "}
+                  <button className="btn sm gold" onClick={()=>setRole(r.id,"viewer")}>승인</button>{" "}
                   <button className="btn sm danger" onClick={()=>removeUser(r)}>거절</button>
                 </td>
               </tr>))}
@@ -2055,17 +2108,17 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
 
       <div className="panel">
         <h2>사용 중인 구성원 <span className="muted small">{active.length}명</span></h2>
-        <p className="small muted"><b>담당</b>을 정하면 그 사람이 무엇을 볼지 결정됩니다.
-          담당을 <b>안 정하면</b> 달력과 일반 중보기도만 보게 됩니다(고치기는 안 됨).<br/>
-          · <b>교역자</b> — 성도와 교회학교 전체를 보고 고칠 수 있습니다<br/>
-          · <b>장로</b> — 성도와 교회학교 전체를 <b>보기만</b> 합니다(고치기 안 됨).
-            출석 현황도 볼 수 있고, <b>속 담당을 함께 주면 그 속만 체크</b>할 수 있습니다<br/>
-          · <b>심방·긴밀 기도 전체 보기</b> — 이것을 함께 켜 준 사람만 심방 메뉴와 긴밀 기도를 봅니다.
-            켜지 않아도 자기가 심방한 기록은 남기고 볼 수 있습니다<br/>
+        <p className="small muted"><b>담당</b>을 하나씩 주고, 담당마다 <b>열람</b>인지 <b>수정</b>인지 정합니다.
+          수정으로 주면 그 범위 교인의 신상을 고치고 출석도 체크할 수 있습니다.
+          여러 담당을 함께 줄 수 있고, 겹치면 넓은 쪽을 따릅니다.<br/>
+          예) <b>장로(열람) + 1여선교회(수정)</b> → 전체는 보기만, 1여선교회만 고치고 출석 체크<br/>
+          · <b>교역자 / 장로</b> — 성도와 교회학교 전체가 범위입니다<br/>
           · <b>여선교회 전체 / 남선교회 전체</b> — 총여선교회장·총남선교회장께 드립니다<br/>
-          · <b>속 하나 / 속 전체 / 교회학교 부서</b> — 그 범위 교인만 보고 출석을 체크합니다<br/>
-          · <b>예배 출석 체크만</b> — 출석만 체크하고 교인 신상은 전혀 못 봅니다<br/>
-          한 사람에게 <b>여러 담당</b>을 줄 수 있습니다(예: 교역자 + 심방 전체 보기).</p>
+          · <b>속 하나 / 교회학교 부서</b> — 그 범위만 봅니다<br/>
+          · <b>예배 출석 체크만</b> — 수정으로 주면 출석만 체크하고 교인 신상은 못 봅니다<br/>
+          · <b>심방·긴밀 기도 전체 보기</b> — 켜 준 사람만 심방 메뉴와 긴밀 기도를 봅니다.
+            켜지 않아도 자기가 심방한 기록은 남기고 볼 수 있습니다<br/>
+          담당을 하나도 안 주면 <b>달력과 일반 중보기도</b>만 보게 됩니다.</p>
         {rows!==null &&
           <div className="tbl-wrap"><table>
             <thead><tr><th>이름</th><th>이메일</th><th>권한</th><th>담당 속(속장)</th><th></th></tr></thead>
@@ -2074,46 +2127,59 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
                 <td className="nw">{r.name || <span className="muted">이름 없음</span>}{r.id===me.id && " (나)"}</td>
                 <td className="nw">{r.email}</td>
                 <td className="nw"><span className={"chip "+r.role}>{ROLE_LABEL[r.role]||r.role}</span>
-                  {scopesOf(leaders, r.id).length>0 && r.role!=="admin" && <span className="chip editor" style={{marginLeft:4}}>속장·교사</span>}</td>
+                  {scopesOf(leaders, r.id).length>0 && r.role!=="admin" && <span className="chip editor" style={{marginLeft:4}}>담당 있음</span>}
+                  {(()=>{ const ab = abilityOf(r.role, scopesOf(leaders, r.id));
+                    return <div className="able">
+                      {ab.can && <span className="able-yes">{ab.can}</span>}
+                      {ab.cant && <span className="able-no">{ab.cant}</span>}
+                    </div>; })()}</td>
                 <td className="scope-col">
                   {r.role==="admin" ? <span className="muted small">관리자는 전체를 봅니다</span> :
                     <React.Fragment>
-                      {scopesOf(leaders, r.id).map(k=>(
+                      {scopesOf(leaders, r.id).map(e=>{
+                        const k = entKey(e), w = entIsW(e, r.role);
+                        const setMode = (on)=>{
+                          const cur = scopesOf(leaders, r.id);
+                          saveLeaders({...(leaders||{}), [r.id]: cur.map(x => entKey(x)===k ? withMode(x, on) : x)});
+                        };
+                        return (
                         <span key={k} className="scope-row">
                           <span className="chip editor">{scopeLabel(k)}</span>
+                          <span className="rw">
+                            <button className={"rw-b"+(w?"":" on")} onClick={()=>setMode(false)}>열람</button>
+                            <button className={"rw-b"+(w?" on":"")} onClick={()=>setMode(true)}>수정</button>
+                          </span>
                           <button className="btn sm ghost" style={{padding:"0 7px"}}
                             title="이 담당 빼기"
                             onClick={()=>{
                               const next = {...(leaders||{})};
-                              const left = scopesOf(leaders, r.id).filter(x=>x!==k);
+                              const left = scopesOf(leaders, r.id).filter(x=>entKey(x)!==k);
                               if(left.length) next[r.id] = left; else delete next[r.id];
                               saveLeaders(next);
                             }}>✕</button>
-                        </span>))}
+                        </span>);})}
                       <select value="" onChange={e=>{
                         if(!e.target.value) return;
                         const cur = scopesOf(leaders, r.id);
-                        if(cur.includes(e.target.value)) return;
-                        saveLeaders({...(leaders||{}), [r.id]: [...cur, e.target.value]});
+                        if(cur.some(x=>entKey(x)===e.target.value)) return;
+                        saveLeaders({...(leaders||{}), [r.id]: [...cur, e.target.value + ":r"]});
                       }}>
                         <option value="">＋ 담당 추가…</option>
-                        {SCOPE_LIST().filter(([k])=>!scopesOf(leaders, r.id).includes(k))
+                        {SCOPE_LIST().filter(([k])=>!scopesOf(leaders, r.id).some(x=>entKey(x)===k))
                           .map(([k,l])=><option key={k} value={k}>{l}</option>)}
                       </select>
                       {scopesOf(leaders, r.id).length===0 &&
-                        <div className="muted small">담당 없음 — 전체를 봅니다</div>}
+                        <div className="muted small">담당 없음 — 달력과 일반 중보기도만 봅니다</div>}
                     </React.Fragment>}
                 </td>
                 <td style={{whiteSpace:"nowrap"}}>
                   {r.id!==me.id && <React.Fragment>
-                    {r.role!=="viewer" &&
-                      <button className="btn sm ghost" onClick={()=>setRole(r.id,"viewer")}>열람만</button>}{" "}
-                    {r.role!=="editor" &&
-                      <button className="btn sm ghost" onClick={()=>setRole(r.id,"editor")}>수정 가능</button>}{" "}
-                    {r.role!=="admin" &&
-                      <button className="btn sm ghost" onClick={()=>{
-                        if(confirm(`${r.name||r.email} 님을 관리자로 지정할까요? 관리자는 사용자 승인 권한도 갖게 됩니다.`)) setRole(r.id,"admin");
-                      }}>관리자로</button>}{" "}
+                    {r.role !== "admin" && <button className="btn sm ghost" onClick={()=>{
+                      if(confirm(`${r.name||r.email} 님을 관리자로 지정할까요? 관리자는 사용자 승인 권한도 갖게 됩니다.`)) setRole(r.id,"admin");
+                    }}>관리자로</button>}{" "}
+                    {r.role === "admin" && <button className="btn sm ghost" onClick={()=>{
+                      if(confirm(`${r.name||r.email} 님의 관리자 권한을 내릴까요? 담당에 따라 보고 고칠 수 있게 됩니다.`)) setRole(r.id,"viewer");
+                    }}>관리자 해제</button>}{" "}
                     <button className="btn sm danger" onClick={()=>{
                       if(confirm(`${r.name||r.email} 님의 접근 권한을 해제할까요? 다시 승인하기 전까지 교인 기록을 볼 수 없게 됩니다.`)) setRole(r.id,"pending");
                     }}>권한 해제</button>{" "}
