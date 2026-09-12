@@ -151,6 +151,7 @@
   .own-nums > div{text-align:center;min-width:52px}
   .own-nums b{display:block;font-family:"Gowun Batang",serif;font-size:17px;color:var(--pine)}
   .own-nums span{display:block;font-size:10.5px;color:var(--muted);white-space:nowrap}
+  .own-act{display:flex;gap:6px;flex:0 0 auto}
   .join-code{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 16px;
     padding:12px 15px;border-radius:12px;border:1px solid #D8C79A;
     background:linear-gradient(180deg,#FDF8EC 0%,#F6EBCE 100%)}
@@ -1136,6 +1137,7 @@ function Pending({profile, logout, refresh, back}){
 function OwnerBoard({sb, onClose, onPick}){
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState("");
 
   const load = useCallback(async ()=>{
     setErr("");
@@ -1168,6 +1170,23 @@ function OwnerBoard({sb, onClose, onPick}){
     return {t:"안 쓰는 듯", c:"st-none"};
   };
   const kb = n => n < 1024 ? n + "B" : (n/1024 < 1024 ? Math.round(n/1024) + "KB" : (n/1048576).toFixed(1) + "MB");
+
+  const dropChurch = async (r)=>{
+    const typed = prompt(
+      `[운영자] ${r.name} 를 지웁니다.\n\n` +
+      `교인 ${r.members_total}명, 출석 ${r.att_days}일치 기록이 모두 사라집니다.\n` +
+      `관리자: ${r.admin_email || "없음"}\n` +
+      `되돌릴 수 없습니다.\n\n` +
+      `정말 지우시려면 교회 이름을 그대로 적어 주세요.`, "");
+    if(typed === null) return;
+    if(typed.trim() !== r.name){ alert("교회 이름이 달라 지우지 않았습니다."); return; }
+    setBusy(r.id); setErr("");
+    const {error} = await sb.rpc("delete_church", {p_id: r.id, p_name: r.name});
+    setBusy("");
+    if(error){ setErr(errMsg(error)); return; }
+    try{ if(localStorage.getItem(PICK_KEY) === r.id) localStorage.removeItem(PICK_KEY); }catch(_){}
+    load();
+  };
 
   if(rows === null)
     return <div className="center-box"><div className="panel empty">현황을 불러오는 중…</div></div>;
@@ -1207,7 +1226,11 @@ function OwnerBoard({sb, onClose, onPick}){
                 <div><b>{agoText(r.last_sign_in)}</b><span>마지막 접속</span></div>
                 <div><b>{kb(Number(r.photo_bytes || 0))}</b><span>자료 크기</span></div>
               </div>
-              <button className="btn sm ghost" onClick={()=>onPick(r.id)}>들어가 보기</button>
+              <div className="own-act">
+                <button className="btn sm ghost" onClick={()=>onPick(r.id)}>들어가 보기</button>
+                <button className="btn sm danger" disabled={busy === r.id}
+                  onClick={()=>dropChurch(r)}>{busy === r.id ? "지우는 중…" : "지우기"}</button>
+              </div>
             </div>);
         })}
 
