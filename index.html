@@ -422,6 +422,9 @@
     background:linear-gradient(180deg,#FFFFFF 0%,#EFF3F9 46%,#DCE3EF 100%);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.95), inset 0 -2px 4px rgba(34,53,92,.08),
       0 2px 4px rgba(34,53,92,.12);transition:filter .12s, transform .08s}
+  .att-item.locked{opacity:.62;cursor:default;box-shadow:none}
+  .att-item.locked:hover{filter:none}
+  .att-item.locked:active{transform:none}
   .att-item:hover{filter:brightness(1.05)}
   .att-item:active{transform:translateY(1px)}
   .att-item.on{border-color:#1B2C4E;color:#fff;font-weight:700;text-shadow:0 1px 1px rgba(0,0,0,.3);
@@ -1524,6 +1527,8 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   /* 사람 범위로 쓰는 담당만 (역할 표시는 뺀다) */
   const rangeScopes = myScopes.filter(k => ROLE_SCOPES.indexOf(k) < 0);
   const isLeader = !isAdmin && !isPastor && !isElder && rangeScopes.length > 0;  /* 속장 · 교회학교 교사 */
+  /* 장로가 속장을 겸할 때 — 보기는 전체, 체크는 자기 담당만 */
+  const elderScopes = isElder ? rangeScopes : [];
   /* 명단에서 볼 수 있는 범위 — '예배 출석 체크만'은 명단 권한이 아니므로 뺀다 */
   const listScopes = rangeScopes.filter(k => k !== ATT_ONLY);
   const editRole = profile.role === "admin" || profile.role === "editor";
@@ -1555,6 +1560,12 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   const attMembers = isLeader
     ? members.filter(m => rangeScopes.some(k => inScope(m, k)))
     : members;
+  /* 이 사람이 출석을 체크해도 되는 교인인지 */
+  const canCheckMember = (m) => {
+    if(isAdmin || isPastor) return true;
+    if(isElder) return elderScopes.some(k => inScope(m, k));   /* 겸직한 담당만 */
+    return canCheckAtt;
+  };
   /* 속장·교사가 담당 범위 밖이라도 볼 수 있는 사람: 담당 교인과 가족으로 이어진 분 (한 다리까지) */
   const viewMembers = useMemo(()=>{
     if(!isLeader) return members;
@@ -1800,7 +1811,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   } else if(attOnly){
     navItems = [["home","홈"],["att","예배 출석 체크"]];
   } else if(isElder){
-    navItems = [["home","홈"],["members","교인"],["cal","달력"],["pray","중보기도"]];
+    navItems = [["home","홈"],["members","교인"],["att","출석"],["cal","달력"],["pray","중보기도"]];
   } else if(isLeader){
     navItems = [["home","홈"],
       ["members", listScopes.every(k=>k.indexOf("S_")===0) ? "우리 부서"
@@ -1926,7 +1937,9 @@ function App({sb, profile, logout, churchId, leaveChurch}){
               }
             }}/>
         )}
-        {view==="att" && <Attendance members={attMembers} att={att} saveAtt={saveAtt} canEdit={canCheckAtt}
+        {view==="att" && <Attendance members={attMembers} att={att} saveAtt={saveAtt}
+          canEdit={canCheckAtt || (isElder && elderScopes.length > 0)}
+          canCheckMember={canCheckMember}
           schoolClasses={schoolClasses} specials={specials} saveSpecials={saveSpecials} isAdmin={isAdmin || canEdit}/>}
         {view==="visit" && (!canSeeAllCare
           ? <p className="empty">심방 기록은 목회자와 관리자만 볼 수 있습니다.</p>
@@ -2028,7 +2041,8 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
         <p className="small muted"><b>담당</b>을 정하면 그 사람이 무엇을 볼지 결정됩니다.
           담당을 <b>안 정하면</b> 달력과 일반 중보기도만 보게 됩니다(고치기는 안 됨).<br/>
           · <b>교역자</b> — 성도와 교회학교 전체를 보고 고칠 수 있습니다<br/>
-          · <b>장로</b> — 성도와 교회학교 전체를 <b>보기만</b> 합니다(고치기·출석 체크 안 됨)<br/>
+          · <b>장로</b> — 성도와 교회학교 전체를 <b>보기만</b> 합니다(고치기 안 됨).
+            출석 현황도 볼 수 있고, <b>속 담당을 함께 주면 그 속만 체크</b>할 수 있습니다<br/>
           · <b>심방·긴밀 기도 전체 보기</b> — 이것을 함께 켜 준 사람만 심방 메뉴와 긴밀 기도를 봅니다.
             켜지 않아도 자기가 심방한 기록은 남기고 볼 수 있습니다<br/>
           · <b>속 하나 / 속 전체 / 교회학교 부서</b> — 그 범위 교인만 보고 출석을 체크합니다<br/>
@@ -2720,7 +2734,8 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
 }
 
 /* ───────── 출석 체크 ───────── */
-function Attendance({members, att, saveAtt, canEdit, schoolClasses, specials, saveSpecials, isAdmin}){
+function Attendance({members, att, saveAtt, canEdit, canCheckMember, schoolClasses, specials, saveSpecials, isAdmin}){
+  const mayCheck = m => canEdit && (!canCheckMember || canCheckMember(m));
   const [svc, setSvc] = useState("sun");
   const [showPast, setShowPast] = useState(false);   /* 지난 특별예배 펼치기 */
   /* 특별예배: 기간이 끝나지 않은 것만 탭에 두고, 지난 것은 접어 둔다 */
@@ -2749,6 +2764,8 @@ function Attendance({members, att, saveAtt, canEdit, schoolClasses, specials, sa
   const checked = (att[date] && att[date][svc]) || [];
   const toggle = id => {
     if(!canEdit) return;
+    const who = members.find(m => m.id === id);
+    if(who && !mayCheck(who)) return;          /* 담당 밖 교인은 손대지 않습니다 */
     const ids = checked.includes(id) ? checked.filter(x=>x!==id) : [...checked, id];
     saveAtt(date, svc, ids);
   };
@@ -2839,7 +2856,9 @@ function Attendance({members, att, saveAtt, canEdit, schoolClasses, specials, sa
 
   const toggleDept = (k) => {
     if(!canEdit) return;
-    const ids = groups.filter(g=>g.dept && g.dept.key===k).flatMap(g=>g.items.map(m=>m.id));
+    const ids = groups.filter(g=>g.dept && g.dept.key===k)
+      .flatMap(g=>g.items.filter(mayCheck).map(m=>m.id));
+    if(!ids.length) return;
     const allOn = ids.every(id=>checked.includes(id));
     saveAtt(date, svc, allOn ? checked.filter(id=>!ids.includes(id))
                              : [...checked, ...ids.filter(id=>!checked.includes(id))]);
@@ -2847,7 +2866,8 @@ function Attendance({members, att, saveAtt, canEdit, schoolClasses, specials, sa
 
   const toggleGroup = g => {
     if(!canEdit) return;
-    const ids = g.items.map(m=>m.id);
+    const ids = g.items.filter(mayCheck).map(m=>m.id);
+    if(!ids.length) return;
     const allOn = ids.every(id=>checked.includes(id));
     saveAtt(date, svc, allOn ? checked.filter(id=>!ids.includes(id))
                              : [...checked, ...ids.filter(id=>!checked.includes(id))]);
@@ -2966,7 +2986,9 @@ function Attendance({members, att, saveAtt, canEdit, schoolClasses, specials, sa
                   {g.items.map(m=>{
                     const on = checked.includes(m.id);
                     return (
-                      <button key={m.id} className={"att-item"+(on?" on":"")} onClick={()=>toggle(m.id)}
+                      <button key={m.id} className={"att-item"+(on?" on":"")+(mayCheck(m)?"":" locked")}
+                        onClick={()=>toggle(m.id)} disabled={!mayCheck(m)}
+                        title={mayCheck(m)?undefined:"담당 밖이라 보기만 됩니다"}
                         aria-pressed={on}>
                         <span className="mark">{on?"✓":""}</span>
                         <span>{m.name} <span className="muted small">{m.position}</span></span>
@@ -3189,16 +3211,20 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
             aria-label="홈 화면 교회 사진 선택" style={{display:"none"}}
             onChange={e => { const file = e.target.files[0]; e.target.value = ""; choosePhoto(file); }}/>
         </div>
-        <label className="cut-white">
+        {photoDraft && <label className="cut-white">
           <input type="checkbox" checked={cutWhite} disabled={photoBusy}
             onChange={e => {
               const on = e.target.checked;
               setCutWhite(on);
-              if(lastFile.current) choosePhoto(lastFile.current, on);
-              else setPhotoMessage(on ? "사진을 고르면 흰 배경을 지웁니다." : "");
+              /* 틀은 바로 없애고, 원본이 남아 있으면 흰 배경까지 지웁니다 */
+              setPhotoDraft(p => p ? normalizeChurchHomePhoto({...p, cut:on}) : p);
+              setMsg(""); setPhotoError("");
+              if(on && lastFile.current) choosePhoto(lastFile.current, true);
+              else setPhotoMessage("미리보기를 확인한 뒤 사진 저장을 눌러 주세요.");
             }}/>
-          <span>흰 배경 지우기 <span className="muted small">— 사진 가장자리의 흰 부분을 투명하게 만듭니다</span></span>
-        </label>
+          <span>사진 틀 없이 배경에 얹기
+            <span className="muted small"> — 흰 테두리를 없애고, 사진 가장자리의 흰 부분도 투명하게 만듭니다</span></span>
+        </label>}
         <p className="muted">JPG·PNG·WebP, 15MB 이하 · 사진은 저장하기 좋은 크기로 자동 조정됩니다.</p>
         {photoDraft && <React.Fragment>
           <div className="church-photo-options" role="group" aria-label="교회 사진 표시 방법">
