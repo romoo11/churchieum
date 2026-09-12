@@ -262,6 +262,7 @@
     background:linear-gradient(180deg,#EBD9A4 0%,#D3B159 44%,#B8912F 100%);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -2px 4px rgba(0,0,0,.18),
       0 2px 4px rgba(0,0,0,.24)}
+  .refresh-btn{font-size:16px;line-height:1;padding:5px 10px}
   .backup-btn{color:#EEF1F7;padding:6px 11px;border-radius:11px;font-size:13px;white-space:nowrap;
     border:1px solid rgba(255,255,255,.24);
     background:linear-gradient(180deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,.11) 46%,rgba(255,255,255,.03) 100%);
@@ -1898,6 +1899,8 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             ))}
           </nav>
           <div className="top-right">
+            <button className="backup-btn refresh-btn" title="새로 불러오기"
+              onClick={()=>window.location.reload()} aria-label="새로 불러오기">⟳</button>
             {canEdit && !isLeader && <button className="backup-btn" onClick={doExport}>백업</button>}
             {isAdmin && <button className="backup-btn" onClick={()=>fileRef.current.click()}>가져오기</button>}
             {leaveChurch && <button className="backup-btn" onClick={leaveChurch} title="다른 교회로">
@@ -2121,18 +2124,11 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
           담당을 하나도 안 주면 <b>달력과 일반 중보기도</b>만 보게 됩니다.</p>
         {rows!==null &&
           <div className="tbl-wrap"><table>
-            <thead><tr><th>이름</th><th>이메일</th><th>권한</th><th>담당 속(속장)</th><th></th></tr></thead>
+            <thead><tr><th>이름</th><th>이메일</th><th>담당과 권한</th><th></th></tr></thead>
             <tbody>{active.map(r=>(
               <tr key={r.id}>
                 <td className="nw">{r.name || <span className="muted">이름 없음</span>}{r.id===me.id && " (나)"}</td>
                 <td className="nw">{r.email}</td>
-                <td className="nw"><span className={"chip "+r.role}>{ROLE_LABEL[r.role]||r.role}</span>
-                  {scopesOf(leaders, r.id).length>0 && r.role!=="admin" && <span className="chip editor" style={{marginLeft:4}}>담당 있음</span>}
-                  {(()=>{ const ab = abilityOf(r.role, scopesOf(leaders, r.id));
-                    return <div className="able">
-                      {ab.can && <span className="able-yes">{ab.can}</span>}
-                      {ab.cant && <span className="able-no">{ab.cant}</span>}
-                    </div>; })()}</td>
                 <td className="scope-col">
                   {r.role==="admin" ? <span className="muted small">관리자는 전체를 봅니다</span> :
                     <React.Fragment>
