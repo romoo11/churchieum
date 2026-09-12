@@ -982,15 +982,19 @@ const SCOPE_LIST = () => [
   [ELDER, "장로 — 성도·교회학교 전체 열람만 (수정 불가)"],
   [CARE_ALL, "심방·긴밀 기도 전체 보기"],
   [ATT_ONLY, "예배 출석 체크만 (성도 전체 · 교회학교 제외)"],
-  ["MIN", "교역자"],
-  ["SAMO", "사모"],
   ["SOK_ALL", "속 전체 (남·여 모든 속)"],
+  ["SOK_F_ALL", "여선교회 전체 (총여선교회장)"],
+  ["SOK_M_ALL", "남선교회 전체 (총남선교회장)"],
   ...sokKeys()
       .map(k=>[k, sokKeyLabel(k)]),
   ["S_ALL", "교회학교 전체 (유치부~청년부)"],
   ...SCHOOL_DEPTS.map(s=>["S_"+s.key, "교회학교 · "+s.label]),
 ];
-const scopeLabel = k => { const f = SCOPE_LIST().find(x=>x[0]===k); return f ? f[1] : "편성 없음"; };
+const LEGACY_SCOPE = {MIN:"교역자 명단", SAMO:"사모 명단"};
+const scopeLabel = k => {
+  const f = SCOPE_LIST().find(x=>x[0]===k);
+  return f ? f[1] : (LEGACY_SCOPE[k] || "편성 없음");
+};
 /* 한 사람의 담당 목록 (예전 방식인 문자열 하나도 그대로 읽힘) */
 const scopesOf = (leaders, id) => {
   const v = (leaders||{})[id];
@@ -998,10 +1002,23 @@ const scopesOf = (leaders, id) => {
   return Array.isArray(v) ? v.filter(Boolean) : [v];
 };
 /* 담당 범위에 드는 사람인지 */
+/* 속 하나가 여선교회인지 남선교회인지 (나이 방식은 키 앞 글자, 그 밖에는 이름으로) */
+const sokSideOf = (key) => {
+  if(!key) return "";
+  if(key[0] === "여" || key[0] === "남") return key[0];
+  const f = SOK_LIST.find(s => s.id === key);
+  const nm = (f && f.name) || "";
+  if(nm.indexOf("여") >= 0) return "여";
+  if(nm.indexOf("남") >= 0) return "남";
+  return "";
+};
+
 const inScope = (m, k) => {
   const sk = scopeKeyOf(m);
   if(k === ATT_ONLY)  return sk.indexOf("S_") !== 0;                  /* 교역자·어른 전부, 교회학교 제외 */
   if(k === "SOK_ALL") return sk === "MIN" || sk === "SAMO" || (sk !== "zz" && sk.indexOf("S_") !== 0);
+  if(k === "SOK_F_ALL") return sokSideOf(sk) === "여";                /* 여선교회 전부 */
+  if(k === "SOK_M_ALL") return sokSideOf(sk) === "남";                /* 남선교회 전부 */
   if(k === "S_ALL")   return sk.indexOf("S_") === 0;                  /* 교회학교 전부 */
   return sk === k;
 };
@@ -2045,6 +2062,7 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
             출석 현황도 볼 수 있고, <b>속 담당을 함께 주면 그 속만 체크</b>할 수 있습니다<br/>
           · <b>심방·긴밀 기도 전체 보기</b> — 이것을 함께 켜 준 사람만 심방 메뉴와 긴밀 기도를 봅니다.
             켜지 않아도 자기가 심방한 기록은 남기고 볼 수 있습니다<br/>
+          · <b>여선교회 전체 / 남선교회 전체</b> — 총여선교회장·총남선교회장께 드립니다<br/>
           · <b>속 하나 / 속 전체 / 교회학교 부서</b> — 그 범위 교인만 보고 출석을 체크합니다<br/>
           · <b>예배 출석 체크만</b> — 출석만 체크하고 교인 신상은 전혀 못 봅니다<br/>
           한 사람에게 <b>여러 담당</b>을 줄 수 있습니다(예: 교역자 + 심방 전체 보기).</p>
