@@ -985,14 +985,19 @@ const GUESTS = Array.from({length:10}, (_,i)=>({
 }));
 
 const ATT_ONLY = "ATT_ONLY";   /* 예배 출석 체크만 (성도 전체 · 교회학교 제외) */
-const CARE_ALL = "CARE_ALL";   /* 심방·긴밀 기도 전체 보기 */
+const CARE_ALL   = "CARE_ALL";    /* (예전) 심방·긴밀 기도 둘 다 */
+const VISIT_ALL  = "VISIT_ALL";   /* 심방 기록 전체 보기 */
+const SECRET_ALL = "SECRET_ALL";  /* 긴밀 기도 보기 */
 const PASTOR   = "PASTOR";     /* 교역자 — 성도·교회학교 전체 열람·수정 */
 const ELDER    = "ELDER";      /* 장로 — 성도·교회학교 전체 열람만 */
-const ROLE_SCOPES = [PASTOR, ELDER, CARE_ALL];
+const ROLE_SCOPES = [PASTOR, ELDER, CARE_ALL, VISIT_ALL, SECRET_ALL];
+/* 사람 범위가 아닌, 보기 권한만 뜻하는 표시 */
+const VIEW_FLAGS = [CARE_ALL, VISIT_ALL, SECRET_ALL];
 const SCOPE_LIST = () => [
   [PASTOR, "교역자 (성도·교회학교 전체)"],
   [ELDER, "장로 (성도·교회학교 전체)"],
-  [CARE_ALL, "심방·긴밀 기도 전체 보기"],
+  [VISIT_ALL, "심방 기록 전체 보기"],
+  [SECRET_ALL, "긴밀 기도 보기"],
   [ATT_ONLY, "예배 출석 체크만 (성도 전체 · 교회학교 제외)"],
   ["SOK_ALL", "속 전체 (남·여 모든 속)"],
   ["SOK_F_ALL", "여선교회 전체 (총여선교회장)"],
@@ -1002,7 +1007,7 @@ const SCOPE_LIST = () => [
   ["S_ALL", "교회학교 전체 (유치부~청년부)"],
   ...SCHOOL_DEPTS.map(s=>["S_"+s.key, "교회학교 · "+s.label]),
 ];
-const LEGACY_SCOPE = {MIN:"교역자 명단", SAMO:"사모 명단"};
+const LEGACY_SCOPE = {MIN:"교역자 명단", SAMO:"사모 명단", CARE_ALL:"심방·긴밀 기도 전체 보기"};
 const scopeLabel = k => {
   const f = SCOPE_LIST().find(x=>x[0]===k);
   return f ? f[1] : (LEGACY_SCOPE[k] || "편성 없음");
@@ -1566,13 +1571,14 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   const oldRole = profile.role;                                 /* 예전 자료를 읽을 때만 씁니다 */
   const isW = e => entIsW(e, oldRole);
 
-  /* 사람 범위로 쓰는 담당만 (심방 열람 표시는 뺀다) */
-  const rangeEnts = myEnts.filter(e => entKey(e) !== CARE_ALL);
+  /* 사람 범위로 쓰는 담당만 (보기 표시는 뺀다) */
+  const rangeEnts = myEnts.filter(e => VIEW_FLAGS.indexOf(entKey(e)) < 0);
   const listEnts  = rangeEnts.filter(e => entKey(e) !== ATT_ONLY);
   const wideEnts  = rangeEnts.filter(e => entKey(e) === PASTOR || entKey(e) === ELDER);
 
-  /* 심방·긴밀 기도 전체 보기 */
-  const canSeeAllCare = isAdmin || myEnts.some(e => entKey(e) === CARE_ALL);
+  /* 심방 기록 전체 보기 / 긴밀 기도 보기 — 따로 정합니다 */
+  const canSeeVisits = isAdmin || myEnts.some(e => entKey(e) === VISIT_ALL || entKey(e) === CARE_ALL);
+  const canSeeSecret = isAdmin || myEnts.some(e => entKey(e) === SECRET_ALL || entKey(e) === CARE_ALL);
   /* 성도·교회학교 전체를 보는 사람 */
   const fullView = isAdmin || wideEnts.length > 0;
   /* 담당이 하나도 없는 사람 — 달력과 일반 중보기도만 */
@@ -1857,7 +1863,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   } else {
     navItems = [["home","홈"],["members","교인"],["att","출석"],["cal","달력"],["pray","중보기도"]];
   }
-  if(canSeeAllCare && !noScope){
+  if(canSeeVisits && !noScope){
     const at = navItems.findIndex(x=>x[0]==="pray");
     navItems.splice(at >= 0 ? at : navItems.length, 0, ["visit","심방"]);
   }
@@ -1962,7 +1968,8 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             setMemView={v=>{ pushHistory({view:"members", memView}); setMemView(v); }}
             canEdit={canEdit || canEditMember(viewMembers.find(x=>x.id===memView.id))}
             canDelete={canEdit}
-            allMembers={viewMembers} openMember={openMember} limited={!canSeeAllCare}
+            allMembers={viewMembers} openMember={openMember}
+            limited={!canSeeVisits} seeSecret={canSeeSecret}
             canPray={!attOnly && (canEdit || canWriteM(memView && byId(memView.id)))}
             meName={profile.name || profile.email} meId={profile.id}
             outside={isLeader && !myMembers.some(x=>x.id===memView.id)}
@@ -1979,7 +1986,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
           canEdit={canCheckAtt}
           canCheckMember={canCheckMember}
           schoolClasses={schoolClasses} specials={specials} saveSpecials={saveSpecials} isAdmin={isAdmin || canEdit}/>}
-        {view==="visit" && (!canSeeAllCare
+        {view==="visit" && (!canSeeVisits
           ? <p className="empty">심방 기록은 목회자와 관리자만 볼 수 있습니다.</p>
           : <Visits members={members} update={updateMember} openMember={openMember} canEdit={canEdit}
               meName={profile.name || profile.email} meId={profile.id}/>)}
@@ -1988,7 +1995,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
           openable={!noScope && !attOnly}/>}
         {view==="pray" &&
           <Prayers members={members} update={updateMember} openMember={openMember}
-            canEdit={canEdit && !noScope} seeSecret={canSeeAllCare}
+            canEdit={canEdit && !noScope} seeSecret={canSeeSecret}
             openable={!noScope && !attOnly}
             meName={profile.name || profile.email} meId={profile.id}/>}
         {view==="team" && isAdmin && <Team sb={sb} me={profile} leaders={leaders} saveLeaders={saveLeaders}
@@ -2017,8 +2024,9 @@ function abilityOf(role, ents){
   const key = e => entKey(e);
   const w   = e => entIsW(e, role);
   const wide = es.filter(e => key(e) === PASTOR || key(e) === ELDER);
-  const care = es.some(e => key(e) === CARE_ALL);
-  const range = es.filter(e => key(e) !== CARE_ALL);
+  const seeV = es.some(e => key(e) === VISIT_ALL || key(e) === CARE_ALL);
+  const seeS = es.some(e => key(e) === SECRET_ALL || key(e) === CARE_ALL);
+  const range = es.filter(e => VIEW_FLAGS.indexOf(key(e)) < 0);
   const list  = range.filter(e => key(e) !== ATT_ONLY && key(e) !== PASTOR && key(e) !== ELDER);
   const can = [], cant = [];
 
@@ -2040,8 +2048,9 @@ function abilityOf(role, ents){
     if(wr.some(e => key(e) === ATT_ONLY)) can.push("출석 체크(성도 전체)");
     if(!wr.length) cant.push("고치기 안 됨 · 출석 체크 안 됨 (모두 열람으로 주셨습니다)");
   }
-  if(care) can.push("심방·긴밀 기도 전체 보기");
-  else if(list.length || wide.length) cant.push("남이 쓴 심방 기록 못 봄");
+  if(seeV) can.push("심방 기록 전체 보기");
+  if(seeS) can.push("긴밀 기도 보기");
+  if(!seeV && (list.length || wide.length)) cant.push("남이 쓴 심방 기록 못 봄");
   return {can: can.join(" · "), cant: cant.join(" · ")};
 }
 
@@ -2119,9 +2128,11 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
           · <b>여선교회 전체 / 남선교회 전체</b> — 총여선교회장·총남선교회장께 드립니다<br/>
           · <b>속 하나 / 교회학교 부서</b> — 그 범위만 봅니다<br/>
           · <b>예배 출석 체크만</b> — 수정으로 주면 출석만 체크하고 교인 신상은 못 봅니다<br/>
-          · <b>심방·긴밀 기도 전체 보기</b> — 켜 준 사람만 심방 메뉴와 긴밀 기도를 봅니다.
+          · <b>심방 기록 전체 보기</b> — 켜 준 사람만 심방 메뉴에서 남이 쓴 기록까지 봅니다.
             켜지 않아도 자기가 심방한 기록은 남기고 볼 수 있습니다<br/>
-          담당을 하나도 안 주면 <b>달력과 일반 중보기도</b>만 보게 됩니다.</p>
+          · <b>긴밀 기도 보기</b> — 긴밀로 표시된 기도 제목을 볼 수 있습니다<br/>
+          담당을 하나도 안 주면 <b>달력과 일반 중보기도</b>만 보게 됩니다.
+          심방 보기와 긴밀 기도 보기는 따로 정할 수 있습니다.</p>
         {rows!==null &&
           <div className="tbl-wrap"><table>
             <thead><tr><th>이름</th><th>이메일</th><th>담당과 권한</th><th></th></tr></thead>
@@ -2593,9 +2604,9 @@ function MemberForm({init, onSave, onCancel}){
 }
 
 /* ───────── 교인 상세 ───────── */
-function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, allMembers, openMember, limited, outside, canPray, meName, meId, specials}){
+function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, allMembers, openMember, limited, seeSecret, outside, canPray, meName, meId, specials}){
   const [pSecret, setPSecret] = useState(false);
-  const visiblePrayers = (m && m.prayers ? m.prayers : []).filter(p => !limited || !p.secret);
+  const visiblePrayers = (m && m.prayers ? m.prayers : []).filter(p => seeSecret || !p.secret);
   /* 속장·교사는 자기가 남긴 심방 기록만 봅니다 */
   const visibleVisits = (m && m.visits ? m.visits : []).filter(v => !limited || v.byId === meId);
   const [vWhen, setVWhen] = useState(nowLocal());
