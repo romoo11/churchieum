@@ -1944,7 +1944,8 @@ function App({sb, profile, logout, churchId, leaveChurch}){
               : ` · ${myMembers.length}명의 신상을 보고 출석을 체크하실 수 있습니다.`}
             {isSchoolTeacher && " 담당 부서 학생의 정보는 직접 수정하실 수 있습니다."}</span>
         </div>}
-        {view==="home" && <Home churchName={churchName} homePhoto={homePhoto} members={attOnly ? [] : myMembers} att={att} go={go} openMember={openMember}/>}
+        {view==="home" && <Home churchName={churchName} homePhoto={homePhoto} members={attOnly ? [] : myMembers} att={att} go={go} openMember={openMember}
+          canSeeVisits={canSeeVisits} canSeeSecret={canSeeSecret} meId={profile.id}/>}
         {view==="members" && attOnly &&
           <p className="empty">예배 출석 체크만 맡으셨습니다. 교인 명부는 볼 수 없습니다.</p>}
         {view==="members" && !attOnly && (
@@ -2202,7 +2203,8 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
 }
 
 /* ───────── 대문 ───────── */
-function Home({churchName, homePhoto, members, att, go, openMember}){
+function Home({churchName, homePhoto, members, att, go, openMember,
+               canSeeVisits, canSeeSecret, meId}){
   const thisMonth = new Date().getMonth()+1;
   const birthdays = members
     .filter(m => m.birth && Number(m.birth.split("-")[1]) === thisMonth)
@@ -2214,9 +2216,12 @@ function Home({churchName, homePhoto, members, att, go, openMember}){
   }, [att]);
   const sunCount = lastSunday ? att[lastSunday].sun.length : 0;
 
-  const openPray = members.reduce((n,m)=> n + (m.prayers||[]).filter(p=>p.status==="open").length, 0);
+  /* 볼 수 있는 것만 셉니다 */
+  const openPray = members.reduce((n,m)=> n + (m.prayers||[])
+    .filter(p=>p.status==="open" && (canSeeSecret || !p.secret)).length, 0);
   const monthPrefix = `${new Date().getFullYear()}-${pad(thisMonth)}`;
-  const visitsThisMonth = members.reduce((n,m)=> n + (m.visits||[]).filter(v=>(v.when||"").startsWith(monthPrefix)).length, 0);
+  const visitsThisMonth = members.reduce((n,m)=> n + (m.visits||[])
+    .filter(v=>(v.when||"").startsWith(monthPrefix) && (canSeeVisits || v.byId === meId)).length, 0);
 
   return (
     <div>
@@ -2233,9 +2238,10 @@ function Home({churchName, homePhoto, members, att, go, openMember}){
         <button className="stat clay" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>go("pray")}>
           <div className="n">{openPray}</div><div className="l">응답을 기다리는 기도</div>
         </button>
-        <button className="stat gold" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>go("visit")}>
-          <div className="n">{visitsThisMonth}</div><div className="l">이번 달 심방</div>
-        </button>
+        {canSeeVisits &&
+          <button className="stat gold" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>go("visit")}>
+            <div className="n">{visitsThisMonth}</div><div className="l">이번 달 심방</div>
+          </button>}
       </div>
 
       <div className="panel">
