@@ -2340,7 +2340,7 @@ function NewFeed({members, seeSecret, openMember}){
 }
 
 function Home({churchName, homePhoto, members, att, go, openMember,
-               canSeeVisits, canSeeSecret, meId}){
+               showNew, canSeeVisits, canSeeSecret, meId}){
   const thisMonth = new Date().getMonth()+1;
   const birthdays = members
     .filter(m => m.birth && Number(m.birth.split("-")[1]) === thisMonth)
