@@ -174,6 +174,31 @@
     background:linear-gradient(180deg,#FDF8EC 0%,#F6EBCE 100%)}
   .join-code b{display:block;font-family:"Gowun Batang",serif;font-size:26px;letter-spacing:6px;
     color:#7A5B12;margin-top:1px}
+  /* 새로 올라온 것 */
+  .newfeed{margin:0 0 12px;border:1px solid #C8A24A;border-radius:14px;overflow:hidden;
+    background:linear-gradient(180deg,#FDF8EC 0%,#F6EBCE 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.9), 0 2px 6px rgba(74,58,18,.13)}
+  .nf-head{display:flex;align-items:center;gap:9px;padding:11px 14px;cursor:pointer;flex-wrap:wrap}
+  .nf-head b{font-family:"Gowun Batang",serif;font-size:15.5px;color:#4A3A12}
+  .nf-dot{min-width:23px;height:23px;padding:0 6px;border-radius:999px;flex:none;
+    display:inline-flex;align-items:center;justify-content:center;
+    font-size:12.5px;font-weight:700;color:#fff;
+    background:linear-gradient(180deg,#C25A4A,#A8412F);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 1px 3px rgba(0,0,0,.2)}
+  .nf-arrow{margin-left:auto;color:#8A6A2E;font-size:11px}
+  .nf-body{padding:0 10px 11px}
+  .nf-item{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;flex-wrap:wrap;
+    padding:8px 10px;margin-bottom:5px;border:1px solid #E0D3AE;border-radius:11px;
+    background:linear-gradient(180deg,#FFFFFF,#F7F2E4);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95)}
+  .nf-item:hover{filter:brightness(1.03)}
+  .nf-tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;flex:none;
+    border:1px solid rgba(34,53,92,.14)}
+  .t-pray{background:linear-gradient(180deg,#E6EEF8,#CBDBF0);color:#28456F}
+  .t-visit{background:linear-gradient(180deg,#E7F1E4,#CBE0C6);color:#2C5624}
+  .nf-name{font-weight:700;color:var(--pine-deep);flex:none}
+  .nf-text{color:#4A4A4A;font-size:13.5px;flex:1 1 150px;min-width:0}
+  .nf-when{flex:none}
   /* 달력 */
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
   .cal-wd{text-align:center;font-size:12.5px;color:var(--muted);font-weight:600;padding:4px 0}
@@ -1571,7 +1596,14 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   const [att, setAtt] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState("");
-  const [entered, setEntered] = useState(false);   /* 시작 화면 → 들어가기 */
+  /* 시작 화면 → 들어가기. 새로고침해도 유지되고, 앱을 닫으면 다시 대문부터 */
+  const [entered, setEntered] = useState(()=>{
+    try{ return sessionStorage.getItem("entered") === "1"; }catch(_){ return false; }
+  });
+  const enterApp = ()=>{
+    try{ sessionStorage.setItem("entered", "1"); }catch(_){}
+    setEntered(true);
+  };
   const [view, setView] = useState("home");
   const [memView, setMemView] = useState({mode:"list"});
   const fileRef = useRef(null);
@@ -1592,6 +1624,8 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   const listEnts  = rangeEnts.filter(e => entKey(e) !== ATT_ONLY);
   const wideEnts  = rangeEnts.filter(e => entKey(e) === PASTOR || entKey(e) === ELDER);
 
+  /* 교역자 담당을 받은 사람 (새 글 알림 대상) */
+  const isPastorNow = myEnts.some(e => entKey(e) === PASTOR);
   /* 심방 기록 전체 보기 / 긴밀 기도 보기 — 따로 정합니다 */
   const canSeeVisits = isAdmin || myEnts.some(e => entKey(e) === VISIT_ALL || entKey(e) === CARE_ALL);
   const canSeeSecret = isAdmin || myEnts.some(e => entKey(e) === SECRET_ALL || entKey(e) === CARE_ALL);
@@ -1786,8 +1820,22 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     for(let i=0;i<arows.length;i+=100){
       ({error:e} = await sb.from("attendance").upsert(arows.slice(i,i+100))); if(e) return fail(e);
     }
+    /* 파일에 교회 설정(예배·직분·속회 편성 등)이 함께 담겨 있으면 넣습니다 */
+    let cfgDone = false;
+    if(d.config && typeof d.config === "object" && profile.role === "admin"){
+      const ok = confirm(
+        "이 파일에는 교회 설정(예배 종류 · 직분 · 속회 편성)도 들어 있습니다.\n\n" +
+        "지금 설정을 이 파일의 내용으로 바꿀까요?\n" +
+        "[취소]를 누르면 명단만 넣고 설정은 그대로 둡니다.");
+      if(ok){
+        ({error:e} = await sb.from("settings").upsert({church_id:churchId, key:"churchConfig", value:JSON.stringify(d.config)}));
+        if(e) return fail(e);
+        cfgDone = true;
+      }
+    }
     await loadAll();
-    alert(mode === "merge" ? "명단을 합쳐 넣었습니다." : "가져오기(전체 교체)가 완료되었습니다.");
+    alert((mode === "merge" ? "명단을 합쳐 넣었습니다." : "가져오기(전체 교체)가 완료되었습니다.")
+      + (cfgDone ? "\n교회 설정도 함께 바꿨습니다." : ""));
   };
 
   const saveConfig = async (next, nextPhoto) => {
@@ -1885,7 +1933,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   }
   if(isAdmin){ navItems.push(["team","사용자"]); navItems.push(["cfg","설정"]); }
 
-  if(!entered) return <Gate churchName={churchName} onEnter={()=>setEntered(true)}/>;
+  if(!entered) return <Gate churchName={churchName} onEnter={enterApp}/>;
 
   return (
     <div>
@@ -1967,7 +2015,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             {isSchoolTeacher && " 담당 부서 학생의 정보는 직접 수정하실 수 있습니다."}</span>
         </div>}
         {view==="home" && <Home churchName={churchName} homePhoto={homePhoto} members={attOnly ? [] : myMembers} att={att} go={go} openMember={openMember}
-          canSeeVisits={canSeeVisits} canSeeSecret={canSeeSecret} meId={profile.id}/>}
+          showNew={isAdmin || isPastorNow} canSeeVisits={canSeeVisits} canSeeSecret={canSeeSecret} meId={profile.id}/>}
         {view==="members" && attOnly &&
           <p className="empty">예배 출석 체크만 맡으셨습니다. 교인 명부는 볼 수 없습니다.</p>}
         {view==="members" && !attOnly && (
@@ -2225,6 +2273,72 @@ function Team({sb, me, leaders, saveLeaders, churchId, joinCode}){
 }
 
 /* ───────── 대문 ───────── */
+/* 마지막으로 확인한 시각 (이 기기에 기억해 둡니다) */
+const SEEN_KEY = "churchSeenAt";
+const readSeen = () => { try{ return localStorage.getItem(SEEN_KEY) || ""; }catch(_){ return ""; } };
+const writeSeen = v => { try{ localStorage.setItem(SEEN_KEY, v); }catch(_){} };
+
+/* 지난번 확인 뒤로 새로 올라온 중보기도·심방 */
+function collectNew(members, since, seeSecret){
+  const out = [];
+  (members||[]).forEach(m => {
+    (m.prayers||[]).forEach(p => {
+      if(!seeSecret && p.secret) return;
+      const when = p.date || "";
+      if(when && when > since) out.push({kind:"기도", id:p.id, memId:m.id, memName:m.name,
+        when, by:p.by || "", text:p.request || "", secret:!!p.secret});
+    });
+    (m.visits||[]).forEach(v => {
+      const when = (v.when || "").slice(0,10);
+      if(when && when > since) out.push({kind:"심방", id:v.id, memId:m.id, memName:m.name,
+        when, by:v.by || "", text:(v.purpose ? v.purpose + " — " : "") + (v.note || "")});
+    });
+  });
+  return out.sort((a,b)=> b.when.localeCompare(a.when));
+}
+
+function NewFeed({members, seeSecret, openMember}){
+  const [since, setSince] = useState(readSeen);
+  const [open, setOpen] = useState(false);
+  const items = useMemo(()=> collectNew(members, since, seeSecret), [members, since, seeSecret]);
+  if(!since){
+    /* 처음 쓰는 기기 — 오늘까지는 본 것으로 두고 내일부터 모읍니다 */
+    const today = new Date().toISOString().slice(0,10);
+    writeSeen(today);
+    return null;
+  }
+  if(!items.length) return null;
+  const mark = () => {
+    const today = new Date().toISOString().slice(0,10);
+    writeSeen(today); setSince(today); setOpen(false);
+  };
+  const pray = items.filter(x=>x.kind==="기도").length;
+  const visit = items.filter(x=>x.kind==="심방").length;
+  return (
+    <div className="newfeed">
+      <div className="nf-head" onClick={()=>setOpen(o=>!o)}>
+        <span className="nf-dot">{items.length}</span>
+        <b>새로 올라온 것</b>
+        <span className="muted small">
+          {pray ? `중보기도 ${pray}건` : ""}{pray && visit ? " · " : ""}{visit ? `심방 ${visit}건` : ""}
+        </span>
+        <span className="nf-arrow">{open ? "▲" : "▼"}</span>
+      </div>
+      {open && <div className="nf-body">
+        {items.slice(0,30).map(x=>(
+          <button key={x.kind+x.id} className="nf-item" onClick={()=>openMember(x.memId)}>
+            <span className={"nf-tag " + (x.kind==="기도" ? "t-pray" : "t-visit")}>{x.kind}</span>
+            <span className="nf-name">{x.memName}</span>
+            <span className="nf-text">{x.text.length > 46 ? x.text.slice(0,46) + "…" : x.text}</span>
+            <span className="nf-when muted small">{x.when.slice(5)}{x.by ? " · " + x.by : ""}</span>
+          </button>))}
+        {items.length > 30 && <p className="muted small" style={{margin:"6px 2px 0"}}>… 그 밖에 {items.length-30}건</p>}
+        <button className="btn sm" style={{marginTop:8}} onClick={mark}>모두 확인했습니다</button>
+      </div>}
+    </div>
+  );
+}
+
 function Home({churchName, homePhoto, members, att, go, openMember,
                canSeeVisits, canSeeSecret, meId}){
   const thisMonth = new Date().getMonth()+1;
@@ -2248,6 +2362,8 @@ function Home({churchName, homePhoto, members, att, go, openMember,
   return (
     <div>
       <ChurchHomeBanner churchName={churchName} photo={homePhoto}/>
+
+      {showNew && <NewFeed members={members} seeSecret={canSeeSecret} openMember={openMember}/>}
 
       <div className="grid-stats">
         <button className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>go("members")}>
