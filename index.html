@@ -199,6 +199,47 @@
   .nf-name{font-weight:700;color:var(--pine-deep);flex:none}
   .nf-text{color:#4A4A4A;font-size:13.5px;flex:1 1 150px;min-width:0}
   .nf-when{flex:none}
+  /* 인쇄 — 교적 카드 한 장으로 */
+  .print-head{display:none}
+  @media print{
+    @page{ size:A4; margin:14mm 14mm 12mm; }
+    html,body{background:#fff !important}
+    header.top, .tabbar, .newfeed, .owner-bar, .back-line, .no-print,
+    .app-copy, nav, .top-right{display:none !important}
+    .wrap{padding:0 !important;max-width:none !important}
+    .print-head{display:flex !important;align-items:baseline;gap:8px;
+      border-bottom:1.5px solid #333;padding-bottom:6px;margin-bottom:12px}
+    .ph-church{font-family:"Gowun Batang",serif;font-size:15pt;font-weight:700;color:#000}
+    .ph-date{margin-left:auto;font-size:9pt;color:#555}
+    .panel{box-shadow:none !important;border:1px solid #BBB !important;
+      background:#fff !important;border-radius:4px !important;
+      margin-bottom:8px !important;padding:10px 12px !important;
+      break-inside:avoid;page-break-inside:avoid}
+    .panel h2{font-size:11.5pt !important;border:none !important;
+      border-bottom:1px solid #CCC !important;padding-bottom:3px !important;
+      margin-bottom:6px !important;color:#000 !important}
+    .panel h2::after{display:none !important}
+    table{font-size:9.5pt !important;width:100% !important}
+    th,td{padding:3px 6px !important;border-color:#DDD !important;color:#111 !important}
+    thead th{background:#EEE !important;color:#000 !important}
+    .tbl-wrap{overflow:visible !important}
+    .btn, button, select, input, textarea, label{display:none !important}
+    /* 표 안의 이름 단추는 글자로 남깁니다 */
+    td .btn.danger, td .btn.sm.danger{display:none !important}
+    td .btn, td button{display:inline !important;border:none !important;
+      background:none !important;box-shadow:none !important;padding:0 !important;
+      color:#000 !important;font-size:9.5pt !important;font-weight:400 !important;
+      text-shadow:none !important}
+    /* 새로 적는 칸과 화면 안내는 종이에 싣지 않습니다 */
+    .panel h3{display:none !important}
+    .panel > .row{display:none !important}
+    .muted.small, p.small.muted{display:none !important}
+    .mem-photo-lg{width:26mm !important;height:26mm !important;box-shadow:none !important}
+    .chip{border:1px solid #BBB !important;background:#F5F5F5 !important;color:#222 !important;
+      box-shadow:none !important}
+    .empty{color:#777 !important}
+    a{text-decoration:none;color:#000}
+  }
   /* 달력 */
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
   .cal-wd{text-align:center;font-size:12.5px;color:var(--muted);font-weight:600;padding:4px 0}
@@ -2051,7 +2092,8 @@ function App({sb, profile, logout, churchId, leaveChurch}){
                 removeMember(memView.id);
                 setMemView({mode:"list"});
               }
-            }}/>
+            }}
+            printChurch={churchName}/>
         )}
         {view==="att" && <Attendance members={attMembers} att={att} saveAtt={saveAtt}
           canEdit={canCheckAtt}
@@ -2281,7 +2323,7 @@ const writeSeen = v => { try{ localStorage.setItem(SEEN_KEY, v); }catch(_){} };
 /* 지난번 확인 뒤로 새로 올라온 중보기도·심방 */
 function collectNew(members, since, seeSecret){
   const out = [];
-  (members||[]).forEach(m => {
+  (members||[]).filter(Boolean).forEach(m => {
     (m.prayers||[]).forEach(p => {
       if(!seeSecret && p.secret) return;
       const when = p.date || "";
@@ -2342,32 +2384,35 @@ function NewFeed({members, seeSecret, openMember}){
 function Home({churchName, homePhoto, members, att, go, openMember,
                showNew, canSeeVisits, canSeeSecret, meId}){
   const thisMonth = new Date().getMonth()+1;
-  const birthdays = members
-    .filter(m => m.birth && Number(m.birth.split("-")[1]) === thisMonth)
-    .sort((a,b)=> a.birth.slice(5).localeCompare(b.birth.slice(5)));
+  /* 자료가 조금 어긋나 있어도 화면이 멈추지 않게 합니다 */
+  const list0 = (members || []).filter(Boolean);
+  const bd = m => { const b = m && m.birth; return typeof b === "string" ? b : (b ? String(b) : ""); };
+  const birthdays = list0
+    .filter(m => { const b = bd(m); return b.length >= 7 && Number(b.split("-")[1]) === thisMonth; })
+    .sort((a,b)=> bd(a).slice(5).localeCompare(bd(b).slice(5)));
 
   const lastSunday = useMemo(()=>{
-    const dates = Object.keys(att).filter(d => (att[d].sun||[]).length).sort();
+    const dates = Object.keys(att || {}).filter(d => ((att[d] && att[d].sun) || []).length).sort();
     return dates.length ? dates[dates.length-1] : null;
   }, [att]);
-  const sunCount = lastSunday ? att[lastSunday].sun.length : 0;
+  const sunCount = lastSunday ? ((att[lastSunday] && att[lastSunday].sun) || []).length : 0;
 
   /* 볼 수 있는 것만 셉니다 */
-  const openPray = members.reduce((n,m)=> n + (m.prayers||[])
+  const openPray = list0.reduce((n,m)=> n + (m.prayers||[])
     .filter(p=>p.status==="open" && (canSeeSecret || !p.secret)).length, 0);
   const monthPrefix = `${new Date().getFullYear()}-${pad(thisMonth)}`;
-  const visitsThisMonth = members.reduce((n,m)=> n + (m.visits||[])
+  const visitsThisMonth = list0.reduce((n,m)=> n + (m.visits||[])
     .filter(v=>(v.when||"").startsWith(monthPrefix) && (canSeeVisits || v.byId === meId)).length, 0);
 
   return (
     <div>
       <ChurchHomeBanner churchName={churchName} photo={homePhoto}/>
 
-      {showNew && <NewFeed members={members} seeSecret={canSeeSecret} openMember={openMember}/>}
+      {showNew && <NewFeed members={list0} seeSecret={canSeeSecret} openMember={openMember}/>}
 
       <div className="grid-stats">
         <button className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>go("members")}>
-          <div className="n">{members.length}</div><div className="l">등록 교인</div>
+          <div className="n">{list0.length}</div><div className="l">등록 교인</div>
         </button>
         <button className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>go("att")}>
           <div className="n">{sunCount}</div>
@@ -2396,7 +2441,7 @@ function Home({churchName, homePhoto, members, att, go, openMember,
             </tbody></table></div>}
       </div>
 
-      {members.length===0 &&
+      {list0.length===0 &&
         <div className="notice">아직 등록된 교인이 없습니다. 상단의 <b>교인</b> 메뉴에서 첫 교인을 등록해 보세요.</div>}
     </div>
   );
@@ -2748,7 +2793,7 @@ function MemberForm({init, onSave, onCancel}){
 }
 
 /* ───────── 교인 상세 ───────── */
-function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, allMembers, openMember, limited, seeSecret, outside, canPray, meName, meId, specials}){
+function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, allMembers, openMember, limited, seeSecret, outside, canPray, meName, meId, specials, printChurch}){
   const [pSecret, setPSecret] = useState(false);
   const visiblePrayers = (m && m.prayers ? m.prayers : []).filter(p => seeSecret || !p.secret);
   /* 속장·교사는 자기가 남긴 심방 기록만 봅니다 */
@@ -2791,6 +2836,13 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
     <div>
       <div className="back-line">
         <button className="btn sm ghost" onClick={()=>setMemView({mode:"list"})}>← 명부로</button>
+        <button className="btn sm ghost no-print" style={{marginLeft:"auto"}}
+          onClick={()=>window.print()}>인쇄</button>
+      </div>
+
+      <div className="print-head">
+        <span className="ph-church">{printChurch || "교적 카드"}</span>
+        <span className="ph-date">출력일 {new Date().toISOString().slice(0,10)}</span>
       </div>
 
       <div className="panel">
@@ -2807,8 +2859,12 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
         <div className="tbl-wrap" style={{marginTop:12}}><table>
           <tbody>
             <tr><th style={{width:90}}>생년월일</th><td>{m.birth ? `${m.birth} (${age}세)` : <span className="muted">미입력</span>}</td></tr>
-            <tr><th>속회</th><td>{sokOf(m) ? sokLabel(sokOf(m)) :
-              <span className="muted">{SOK_MODE==="manual"
+            <tr><th>속회</th><td>{
+              /* 교역자·사모·청년은 속회 편성 대상이 아니라 안내를 띄우지 않습니다 */
+              sokOf(m) ? sokLabel(sokOf(m))
+              : (isMinister(m) || isSamo(m)) ? <span className="muted">해당 없음</span>
+              : isYoungAdult(m) ? <span className="muted">청년부</span>
+              : <span className="muted">{SOK_MODE==="manual"
                 ? "미지정 — '정보 수정'에서 속회를 골라 주세요"
                 : SOK_MODE==="area"
                 ? "미지정 — 주소에 맞는 속이 없습니다. 주소를 확인하거나 '정보 수정'에서 속회를 골라 주세요"
@@ -2839,8 +2895,18 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
                         title={nm + " 님의 교인 기록으로 이동"}
                         onClick={()=>openMember(link.id)}>{nm} ↗</button>
                     : nm}</td>
-                  <td>{f.age && (/^\d{1,3}$/.test(String(f.age)) ? f.age + "세" : f.age)}</td>
-                  <td>{f.job}</td>
+                  <td>{(()=>{
+                    /* 교인으로 등록된 가족이면 그분 기록의 나이를 씁니다 */
+                    const a = link ? koAge(link.birth) : null;
+                    if(a !== null && a !== undefined) return a + "세";
+                    return f.age && (/^\d{1,3}$/.test(String(f.age)) ? f.age + "세" : f.age);
+                  })()}</td>
+                  <td>{(()=>{
+                    if(f.job) return f.job;
+                    if(!link) return "";
+                    const now = (link.depts||[]).filter(d=>d.current).map(d=>d.name);
+                    return [link.position, ...now].filter(Boolean).join(" · ");
+                  })()}</td>
                 </tr>);
             })}
             </tbody></table></div>}
