@@ -890,7 +890,7 @@ const SOK_STYLE = {
 const headStyle = key => {
   if(!key) return {background:"linear-gradient(135deg,#7A869C,#59637A)", ico:"•"};
   const k = String(key);
-  if(k === "MIN") return {background:"linear-gradient(135deg,#B8912F,#8C6C1E)", ico:"✝"};
+  if(k === "MIN" || k.indexOf("MIN_") === 0) return {background:"linear-gradient(135deg,#B8912F,#8C6C1E)", ico:"✝"};
   if(k === "SAMO") return {background:"linear-gradient(135deg,#9C7BA6,#75577F)", ico:"❦"};
   if(k === "GUEST") return {background:"linear-gradient(135deg,#7A869C,#59637A)", ico:"✦"};
   if(k.indexOf("S_")===0){
@@ -3035,7 +3035,20 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
 }
 
 /* ───────── 출석 체크 ───────── */
-function Attendance({members, att, saveAtt, canEdit, canCheckMember, schoolClasses, specials, saveSpecials, isAdmin}){
+function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMember, schoolClasses, specials, saveSpecials, isAdmin}){
+  /* 자료가 조금 어긋나 있어도 화면이 멈추지 않게 합니다 — 빈 칸·이름 없는 교인·비어 있는 출석 날짜 */
+  const members = useMemo(() => (Array.isArray(members0) ? members0 : [])
+    .filter(m => m && typeof m === "object")
+    .map(m => (typeof m.name === "string" && (m.birth == null || typeof m.birth === "string")
+                && (m.position == null || typeof m.position === "string")) ? m
+      : {...m, name: String(m.name == null ? "" : m.name),
+               birth: m.birth == null ? "" : String(m.birth),
+               position: m.position == null ? "" : String(m.position)}), [members0]);
+  const att = useMemo(() => {
+    const out = {};
+    Object.keys(att0 || {}).forEach(d => { const v = att0[d]; out[d] = (v && typeof v === "object") ? v : {}; });
+    return out;
+  }, [att0]);
   const mayCheck = m => canEdit && (!canCheckMember || canCheckMember(m));
   const [svc, setSvc] = useState("sun");
   const [showPast, setShowPast] = useState(false);   /* 지난 특별예배 펼치기 */
@@ -3103,7 +3116,8 @@ function Attendance({members, att, saveAtt, canEdit, canCheckMember, schoolClass
       if(!map[key]){ map[key] = {key, label, items:[]}; order.push(key); }
       return map[key];
     };
-    bucket("MIN", "교역자");
+    /* 교역자는 직분마다 따로 묶음 — 담임목사 · 부목사 · 전도사 (설정의 교역자 직분 순서대로) */
+    (Array.isArray(MINISTERS) ? MINISTERS : []).forEach(p => { if(p) bucket("MIN_"+p, String(p)); });
     bucket("SAMO", "사모");
     sokKeys().forEach(k=>
       bucket(k, sokKeyLabel(k)));
@@ -3121,7 +3135,7 @@ function Attendance({members, att, saveAtt, canEdit, canCheckMember, schoolClass
 
     list.forEach(m=>{
       if(m.guest){ map["GUEST"].items.push(m); return; }
-      if(isMinister(m)){ map["MIN"].items.push(m); return; }
+      if(isMinister(m)){ const p = String(m.position || "교역자"); bucket("MIN_"+p, p).items.push(m); return; }
       if(isSamo(m)){ map["SAMO"].items.push(m); return; }
       const s = sokOf(m);
       if(s){ const kk = s.id ? s.id : s.g+s.n; bucket(kk, sokLabel(s)).items.push(m); return; }
