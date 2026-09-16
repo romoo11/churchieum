@@ -634,6 +634,26 @@
   .order-no{width:26px;text-align:right;color:#8a94a3;font-size:13px;flex:none}
   .order-nm{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .order-row .btn.sm{min-width:36px;padding:4px 8px}
+  .mem-card.lead{border:2.5px solid #C8961A;padding:6.5px 8.5px;
+    box-shadow:0 0 0 3px rgba(224,178,52,.45), inset 0 1px 0 rgba(255,255,255,.95), 0 2px 5px rgba(140,108,30,.25)}
+  .att-item.lead{border:2.5px solid #C8961A;padding:4.5px 6.5px;
+    box-shadow:0 0 0 3px rgba(224,178,52,.45), inset 0 1px 0 rgba(255,255,255,.95), 0 2px 4px rgba(140,108,30,.22)}
+  .att-item.lead.on{border:2.5px solid #F0C24A;
+    box-shadow:0 0 0 3px rgba(240,194,74,.6), inset 0 1px 0 rgba(255,255,255,.42), 0 2px 5px rgba(22,34,61,.28)}
+  .ord-btn .ord-ico{display:none}
+  @media (max-width:640px){
+    .ord-btn .ord-t{display:none}
+    .ord-btn .ord-ico{display:inline;font-size:15px;line-height:1}
+    /* 단추가 둘일 때는 이름을 한 줄에 두고 단추를 아랫줄 오른쪽으로 */
+    .dept-head:has(.ord-btn){flex-wrap:wrap;row-gap:6px}
+    .dept-head:has(.ord-btn) .nm{flex:1 1 auto;min-width:0}
+    .dept-head:has(.ord-btn) .ct{white-space:nowrap}
+    .dept-head:has(.ord-btn) .sp{margin-left:auto}
+  }
+  .order-row.lead{background:#FBF4DF;border:1.5px solid #C9A227;border-radius:10px;padding:5px 6px}
+  .lead-tag{font-size:11px;font-weight:700;color:#8C6C1E;background:#F6E7B8;border-radius:999px;padding:1px 7px;margin-left:6px;white-space:nowrap}
+  .lead-note{font-size:12.5px;color:#7A6320;margin:6px 0 0}
+  .lead-note i{display:inline-block;width:14px;height:11px;border:2px solid #C9A227;border-radius:4px;vertical-align:-1px;margin-right:4px}
   .order-save-bar{position:sticky;bottom:0;z-index:5;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
     background:rgba(255,255,255,.96);border:1px solid var(--line, #dde3ea);border-radius:12px;padding:10px 12px;
     box-shadow:0 -4px 14px rgba(0,0,0,.08);margin-top:6px}
@@ -875,6 +895,13 @@ const orderSort = (a, b) => {
   if(ha !== hb) return ha ? -1 : 1;
   return koSort(a || {}, b || {});
 };
+/* 첫 칸을 속장·리더 자리로 표시할 묶음인가 — 교역자·사모·미지정·방문자·미배정은 제외 */
+const isSokLeadKey = key => {
+  const k = String(key == null ? "" : key);
+  return !!k && k !== "zz" && k !== "SAMO" && k !== "GUEST" && k.indexOf("MIN") !== 0
+    && k.indexOf("S_") !== 0 && !/_none$/.test(k);
+};
+
 /* 한 묶음 안에서 바꾼 순서를 교회 전체 순서에 끼워 넣습니다 — 다른 묶음의 앞뒤는 그대로 둡니다 */
 const placeOrder = (allMembers, groupIds) => {
   const full = (Array.isArray(allMembers) ? allMembers : []).filter(m => m && m.id != null)
@@ -946,7 +973,7 @@ function MultiOrderEditor({groups, onSave, onClose}){
 }
 
 /* 순서 바꾸기 — ▲▼ 로 자리를 옮기고 한 번에 저장 */
-function OrderEditor({items, onSave, onClose}){
+function OrderEditor({items, onSave, onClose, leadLabel}){
   const clean = (items || []).filter(m => m && m.id != null);
   const [ids, setIds] = useState(() => clean.map(m => m.id));
   const [busy, setBusy] = useState(false);
@@ -967,11 +994,13 @@ function OrderEditor({items, onSave, onClose}){
     <div className="order-edit">
       <p className="muted small" style={{margin:"0 0 8px"}}>
         ▲▼ 단추로 자리를 바꾸고 <b>순서 저장</b>을 눌러 주세요. 선임을 앞에 두시면 됩니다.
-        이 순서는 교인 명부 · 속별 명부 · 출석 체크에 함께 쓰입니다.</p>
+        이 순서는 교인 명부 · 속별 명부 · 교회학교 · 출석 체크에 함께 쓰입니다.
+        {leadLabel && <React.Fragment><br/>맨 위 칸은 <b>{leadLabel}</b>로 금색 테두리가 둘러집니다.</React.Fragment>}</p>
       {shown.map((id, i) => { const m = byId[id]; return (
-        <div key={id} className="order-row">
+        <div key={id} className={"order-row" + (leadLabel && i===0 ? " lead" : "")}>
           <span className="order-no">{i+1}</span>
-          <span className="order-nm">{m.name} <span className="muted small">{m.position}</span></span>
+          <span className="order-nm">{m.name} <span className="muted small">{m.position}</span>
+            {leadLabel && i===0 && <span className="lead-tag">{leadLabel}</span>}</span>
           <button type="button" className="btn sm ghost" onClick={()=>toTop(i)} disabled={busy || i===0} title="맨 위로" aria-label="맨 위로">⤒</button>
           <button type="button" className="btn sm ghost" onClick={()=>move(i,-1)} disabled={busy || i===0} aria-label="위로">▲</button>
           <button type="button" className="btn sm ghost" onClick={()=>move(i,1)} disabled={busy || i===shown.length-1} aria-label="아래로">▼</button>
@@ -2601,11 +2630,11 @@ function Home({churchName, homePhoto, members, att, go, openMember,
 }
 
 /* ───────── 교인 목록 ───────── */
-function MemberCard({m, onClick}){
+function MemberCard({m, onClick, lead, leadLabel}){
   const age = calcAge(m.birth);
   const cur = (m.depts||[]).filter(d=>d.current).map(d=>d.name).join(", ");
   return (
-    <button className="mem-card" onClick={onClick}>
+    <button className={"mem-card" + (lead ? " lead" : "")} onClick={onClick} title={lead ? (leadLabel || "대표 자리") : undefined}>
       <div className="mc-top">
         {m.photo
           ? <img className="mem-avatar" src={m.photo} alt=""/>
@@ -2624,7 +2653,10 @@ function MemberCard({m, onClick}){
 }
 
 /* ── 교회학교 한 부서: 반 나누기 · 반 이름 고치기 · 아이 옮기기 ── */
-function SchoolDept({g, canEdit, setMemView, data, saveDept}){
+function SchoolDept({g, canEdit, setMemView, data, saveDept, canOrder, saveOrder}){
+  const [ordering, setOrdering] = useState(null);   /* 순서를 바꾸는 중인 반 */
+  /* 자료가 조금 어긋나 있어도 멈추지 않게 — 목록이 비었거나 빈 칸이 섞인 경우 */
+  g = {...(g || {}), items: ((g && Array.isArray(g.items)) ? g.items : []).filter(m => m && m.id != null)};
   const preset = DEFAULT_CLASSES[g.key] || [];
   const classes = (data && data.classes) ? data.classes
                 : preset.map((n,i)=>({id:"c"+g.key+i, name:n}));
@@ -2635,22 +2667,30 @@ function SchoolDept({g, canEdit, setMemView, data, saveDept}){
   const bucket = {};
   classes.forEach(c => bucket[c.id] = []);
   const rest = [];
-  g.items.forEach(m => {
+  (g.items || []).filter(m => m && m.id != null).forEach(m => {
     const cid = of[m.id];
     if(cid && bucket[cid]) bucket[cid].push(m); else rest.push(m);
   });
-  const Row = ({name, items, none}) => (
+  const Row = ({rowKey, name, items, none}) => {
+    const mayOrder = canOrder && saveOrder && items.length > 1;
+    const isOrdering = ordering === rowKey;
+    return (
     <div style={{marginBottom:14}}>
       <div className={"cls-head"+(none?" none":"")}>
         <span className="nm">{name}</span>
         <span className="ct">{items.length}명</span>
+        {mayOrder && <button type="button" className="btn sm ghost ord-btn" style={{marginLeft:"auto",padding:"2px 10px"}} title="순서 바꾸기" aria-label="순서 바꾸기"
+          onClick={()=>setOrdering(isOrdering ? null : rowKey)}>{isOrdering ? "순서 닫기" : <React.Fragment><span className="ord-ico" aria-hidden="true">⇅</span><span className="ord-t">순서</span></React.Fragment>}</button>}
       </div>
       {items.length===0
         ? <p className="muted small" style={{margin:"6px 0 0"}}>아직 배정된 학생이 없습니다.</p>
+        : isOrdering
+        ? <OrderEditor items={items} onSave={saveOrder} onClose={()=>setOrdering(null)} leadLabel={none ? null : "리더 자리"}/>
         : <div className="mem-list" style={{marginTop:8}}>
-            {items.map(m=>(
+            {items.map((m, idx)=>(
               <div key={m.id}>
-                <MemberCard m={m} onClick={()=>setMemView({mode:"detail", id:m.id})}/>
+                <MemberCard m={m} onClick={()=>setMemView({mode:"detail", id:m.id})}
+                  lead={idx===0 && !none} leadLabel="리더 자리"/>
                 {canEdit && classes.length>0 &&
                   <div className="row" style={{margin:"4px 0 10px"}}>
                     <span className="muted small">반</span>
@@ -2666,7 +2706,8 @@ function SchoolDept({g, canEdit, setMemView, data, saveDept}){
               </div>))}
           </div>}
     </div>
-  );
+    );
+  };
 
   return (
     <div style={{marginBottom:22}}>
@@ -2694,10 +2735,10 @@ function SchoolDept({g, canEdit, setMemView, data, saveDept}){
       {g.items.length===0
         ? <p className="muted small" style={{margin:"0 0 8px"}}>해당 교인이 없습니다.</p>
         : classes.length===0
-          ? <Row name="전체" items={g.items}/>
+          ? <Row rowKey="all" name="전체" items={(g.items || []).filter(m => m && m.id != null)}/>
           : <React.Fragment>
-              {classes.map(c=> <Row key={c.id} name={c.name} items={bucket[c.id]}/>)}
-              {rest.length>0 && <Row name="미배정" items={rest} none/>}
+              {classes.map(c=> <Row key={c.id} rowKey={c.id} name={c.name} items={bucket[c.id]}/>)}
+              {rest.length>0 && <Row rowKey="none" name="미배정" items={rest} none/>}
             </React.Fragment>}
     </div>
   );
@@ -2804,6 +2845,9 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
               <button className={mode==="order"?"on":""} onClick={()=>{ setOrdering(null); setMode("order"); }}>순서 정하기</button>}
           </div>}
         </div>
+        {(book==="sok" || book==="school") &&
+          <p className="lead-note"><i></i>{book==="sok" ? "속마다" : "반마다"} 첫 칸(금색 테두리)은 {book==="sok" ? "속장" : "리더"} 자리입니다.
+            {canOrder && saveOrder ? " 순서는 머리표의 [순서] 단추로 바꿉니다." : ""}</p>}
       </div>
 
       {list.length===0 ? <div className="panel empty">조건에 맞는 교인이 없습니다.</div> :
@@ -2814,6 +2858,7 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
               자녀·학생도 '새 교인 등록'에서 생년월일과 함께 등록하면 나이에 따라 자동으로 분류됩니다.</div> :
             schoolGroups.map(g=>(
               <SchoolDept key={g.key} g={g} canEdit={canEditClass ? canEditClass(g.key) : canEdit} setMemView={setMemView}
+                canOrder={canOrder} saveOrder={saveOrder}
                 data={(schoolClasses||{})[g.key]} saveDept={(d)=>saveClasses({...(schoolClasses||{}), [g.key]: d})}/>
             ))}
         </div>
@@ -2822,15 +2867,17 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
           {sokGroups.map(g=>(
             <div key={g.key} style={{marginBottom:18}}>
               <DeptHead sKey={g.key==="zz" ? "" : g.key} name={g.label} count={g.items.length+"명"}
-                right={canOrder && saveOrder && !q && <button type="button" onClick={()=>setOrdering(ordering==="sok:"+g.key ? null : "sok:"+g.key)}>
-                  {ordering==="sok:"+g.key ? "순서 닫기" : "순서"}</button>}/>
+                right={canOrder && saveOrder && !q && <button type="button" className="ord-btn" title="순서 바꾸기" aria-label="순서 바꾸기" onClick={()=>setOrdering(ordering==="sok:"+g.key ? null : "sok:"+g.key)}>
+                  {ordering==="sok:"+g.key ? "순서 닫기" : <React.Fragment><span className="ord-ico" aria-hidden="true">⇅</span><span className="ord-t">순서</span></React.Fragment>}</button>}/>
               {g.key==="zz" && <p className="muted small" style={{margin:"0 0 8px"}}>
                 성별·생년월일이 없어 속을 정하지 못했습니다. '정보 수정'에서 성별과 생년월일을 넣으면 자동 배정됩니다.</p>}
               {ordering==="sok:"+g.key
-                ? <OrderEditor items={g.items} onSave={saveOrder} onClose={()=>setOrdering(null)}/>
+                ? <OrderEditor items={g.items} onSave={saveOrder} onClose={()=>setOrdering(null)}
+                    leadLabel={isSokLeadKey(g.key) ? "속장 자리" : null}/>
                 : <div className="mem-list">
-                {g.items.map(m=>(
-                  <MemberCard key={m.id} m={m} onClick={()=>setMemView({mode:"detail", id:m.id})}/>
+                {g.items.map((m, idx)=>(
+                  <MemberCard key={m.id} m={m} onClick={()=>setMemView({mode:"detail", id:m.id})}
+                    lead={idx===0 && isSokLeadKey(g.key)} leadLabel="속장 자리"/>
                 ))}
               </div>}
             </div>
@@ -3461,6 +3508,10 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
             const rate = sum && sum.total ? Math.round(sum.on / sum.total * 100) : 0;
             const mayOrder = canOrder && saveOrder && !q && g.key !== "GUEST" && g.items.length > 1;
             const isOrdering = ordering === g.key;
+            /* 속마다·반마다 첫 칸은 속장·리더 자리 (교역자·사모·미배정·방문자는 제외) */
+            const leadKind = g.cls ? (g.none ? null : "리더 자리")
+                           : g.dept ? "리더 자리"
+                           : isSokLeadKey(g.key) ? "속장 자리" : null;
             return (
               <div key={g.key} style={{marginTop: showDeptHead ? 22 : 14}}>
                 {showDeptHead &&
@@ -3471,25 +3522,26 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
                   ? <div className={"cls-head"+(g.none?" none":"")}>
                       <span className="nm">{g.label}</span>
                       <span className="ct">{onCount} / {g.items.length}명</span>
-                      {mayOrder && <button className="btn sm ghost" style={{marginLeft:"auto",padding:"2px 10px"}}
-                        onClick={()=>setOrdering(isOrdering ? null : g.key)}>{isOrdering ? "순서 닫기" : "순서"}</button>}
+                      {mayOrder && <button className="btn sm ghost ord-btn" style={{marginLeft:"auto",padding:"2px 10px"}} title="순서 바꾸기" aria-label="순서 바꾸기"
+                        onClick={()=>setOrdering(isOrdering ? null : g.key)}>{isOrdering ? "순서 닫기" : <React.Fragment><span className="ord-ico" aria-hidden="true">⇅</span><span className="ord-t">순서</span></React.Fragment>}</button>}
                       {canEdit && !isOrdering && <button className="btn sm ghost" style={{marginLeft: mayOrder ? 6 : "auto",padding:"2px 10px"}}
                         onClick={()=>toggleGroup(g)}>{allOn ? "반 해제" : "반 체크"}</button>}
                     </div>
                   : <DeptHead sKey={g.key} name={g.label} count={onCount + " / " + g.items.length + "명"}
                       right={(mayOrder || canEdit) && <React.Fragment>
-                        {mayOrder && <button type="button" onClick={()=>setOrdering(isOrdering ? null : g.key)}>{isOrdering ? "순서 닫기" : "순서"}</button>}
+                        {mayOrder && <button type="button" className="ord-btn" title="순서 바꾸기" aria-label="순서 바꾸기" onClick={()=>setOrdering(isOrdering ? null : g.key)}>{isOrdering ? "순서 닫기" : <React.Fragment><span className="ord-ico" aria-hidden="true">⇅</span><span className="ord-t">순서</span></React.Fragment>}</button>}
                         {canEdit && !isOrdering && <button onClick={()=>toggleGroup(g)}>{allOn ? "전체 해제" : "전체 체크"}</button>}
                       </React.Fragment>}/>}
                 {isOrdering
-                  ? <OrderEditor items={g.items} onSave={saveOrder} onClose={()=>setOrdering(null)}/>
+                  ? <OrderEditor items={g.items} onSave={saveOrder} onClose={()=>setOrdering(null)} leadLabel={leadKind}/>
                   : <div className="att-list" style={{marginTop:8}}>
-                  {g.items.map(m=>{
+                  {g.items.map((m, idx)=>{
                     const on = checked.includes(m.id);
+                    const lead = !!leadKind && idx === 0 && !m.guest;
                     return (
-                      <button key={m.id} className={"att-item"+(on?" on":"")+(mayCheck(m)?"":" locked")}
+                      <button key={m.id} className={"att-item"+(on?" on":"")+(mayCheck(m)?"":" locked")+(lead?" lead":"")}
                         onClick={()=>toggle(m.id)} disabled={!mayCheck(m)}
-                        title={mayCheck(m)?undefined:"담당 밖이라 보기만 됩니다"}
+                        title={mayCheck(m) ? (lead ? leadKind : undefined) : "담당 밖이라 보기만 됩니다"}
                         aria-pressed={on}>
                         <span className="mark">{on?"✓":""}</span>
                         <span>{m.name} <span className="muted small">{m.position}</span></span>
@@ -3498,7 +3550,8 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
                 </div>}
               </div>);
           })}
-        <p className="muted small" style={{marginTop:14,marginBottom:0}}>{canEdit ? "이름을 누르면 출석/해제가 되고, 체크 즉시 서버에 저장됩니다." : "열람 권한으로 접속 중입니다. 출석 체크는 수정 권한이 있는 분만 할 수 있습니다."}</p>
+        <p className="muted small" style={{marginTop:14,marginBottom:0}}>{canEdit ? "이름을 누르면 출석/해제가 되고, 체크 즉시 서버에 저장됩니다." : "열람 권한으로 접속 중입니다. 출석 체크는 수정 권한이 있는 분만 할 수 있습니다."}
+          {" "}속마다·반마다 첫 칸(금색 테두리)은 속장·리더 자리입니다.</p>
       </div>
 
       <div className="panel">
