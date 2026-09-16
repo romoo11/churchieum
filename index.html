@@ -584,7 +584,15 @@
     /* 탭바에 가리지 않도록 본문 아래 여백 */
     .wrap{padding-bottom:78px}
     .app-copy{padding-bottom:86px}
+    /* 홈 — 이번 달 생일: 날짜·이름·직분·연락처를 한 줄에 */
+    .bday-panel{padding:14px 10px}
+    .bday-tbl{font-size:13px}
+    .bday-tbl th{font-size:12px;padding:5px 4px}
+    .bday-tbl td{padding:6px 4px;white-space:nowrap;vertical-align:middle}
+    .bday-tbl td .btn.sm{padding:3px 8px;font-size:13px;white-space:nowrap}
   }
+  .bday-tbl td{vertical-align:middle}
+  .bday-tbl .bd-date{white-space:nowrap;font-variant-numeric:tabular-nums}
 
   /* 교회별 홈 사진: 공통 배경과 교회 사진을 분리 */
   .church-home-banner{aspect-ratio:1400/787;container-type:inline-size}
@@ -2609,14 +2617,15 @@ function Home({churchName, homePhoto, members, att, go, openMember,
           </button>}
       </div>
 
-      <div className="panel">
+      <div className="panel bday-panel">
         <h2>이번 달 생일 <span className="muted small">({thisMonth}월)</span></h2>
         {birthdays.length===0 ? <p className="empty">이번 달에 생일인 교인이 없습니다.</p> :
-          <div className="tbl-wrap"><table>
+          <div className="tbl-wrap"><table className="bday-tbl">
             <thead><tr><th>날짜</th><th>이름</th><th>직분</th><th>연락처</th></tr></thead>
             <tbody>{birthdays.map(m=>(
               <tr key={m.id}>
-                <td>{m.birth.slice(5).replace("-","월 ")}일</td>
+                {/* 날짜는 9.14 처럼 짧게 — 휴대폰에서 한 줄에 들어가도록 */}
+                <td className="bd-date">{(() => { const p = bd(m).split("-"); const mo = Number(p[1]) || "", dy = Number(p[2]) || ""; return dy ? mo + "." + dy : mo + "월"; })()}</td>
                 <td><button className="btn sm ghost" onClick={()=>openMember(m.id)}>{m.name}</button></td>
                 <td>{m.position}</td><td>{m.phone}</td>
               </tr>))}
@@ -2634,7 +2643,7 @@ function MemberCard({m, onClick, lead, leadLabel}){
   const age = calcAge(m.birth);
   const cur = (m.depts||[]).filter(d=>d.current).map(d=>d.name).join(", ");
   return (
-    <button className={"mem-card" + (lead ? " lead" : "")} onClick={onClick} title={lead ? (leadLabel || "대표 자리") : undefined}>
+    <button className={"mem-card" + (lead ? " lead" : "")} onClick={onClick} title={lead && leadLabel ? leadLabel : undefined}>
       <div className="mc-top">
         {m.photo
           ? <img className="mem-avatar" src={m.photo} alt=""/>
@@ -2690,7 +2699,7 @@ function SchoolDept({g, canEdit, setMemView, data, saveDept, canOrder, saveOrder
             {items.map((m, idx)=>(
               <div key={m.id}>
                 <MemberCard m={m} onClick={()=>setMemView({mode:"detail", id:m.id})}
-                  lead={idx===0 && !none} leadLabel="리더 자리"/>
+                  lead={idx===0 && !none} leadLabel={canOrder && saveOrder ? "리더 자리" : null}/>
                 {canEdit && classes.length>0 &&
                   <div className="row" style={{margin:"4px 0 10px"}}>
                     <span className="muted small">반</span>
@@ -2845,9 +2854,9 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
               <button className={mode==="order"?"on":""} onClick={()=>{ setOrdering(null); setMode("order"); }}>순서 정하기</button>}
           </div>}
         </div>
-        {(book==="sok" || book==="school") &&
+        {(book==="sok" || book==="school") && canOrder && saveOrder &&   /* 안내글은 고칠 수 있는 분에게만 */
           <p className="lead-note"><i></i>{book==="sok" ? "속마다" : "반마다"} 첫 칸(금색 테두리)은 {book==="sok" ? "속장" : "리더"} 자리입니다.
-            {canOrder && saveOrder ? " 순서는 머리표의 [순서] 단추로 바꿉니다." : ""}</p>}
+            {" "}순서는 머리표의 [순서] 단추로 바꿉니다.</p>}
       </div>
 
       {list.length===0 ? <div className="panel empty">조건에 맞는 교인이 없습니다.</div> :
@@ -2877,7 +2886,7 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
                 : <div className="mem-list">
                 {g.items.map((m, idx)=>(
                   <MemberCard key={m.id} m={m} onClick={()=>setMemView({mode:"detail", id:m.id})}
-                    lead={idx===0 && isSokLeadKey(g.key)} leadLabel="속장 자리"/>
+                    lead={idx===0 && isSokLeadKey(g.key)} leadLabel={canOrder && saveOrder ? "속장 자리" : null}/>
                 ))}
               </div>}
             </div>
@@ -3541,7 +3550,7 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
                     return (
                       <button key={m.id} className={"att-item"+(on?" on":"")+(mayCheck(m)?"":" locked")+(lead?" lead":"")}
                         onClick={()=>toggle(m.id)} disabled={!mayCheck(m)}
-                        title={mayCheck(m) ? (lead ? leadKind : undefined) : "담당 밖이라 보기만 됩니다"}
+                        title={mayCheck(m) ? (lead && canOrder && saveOrder ? leadKind : undefined) : "담당 밖이라 보기만 됩니다"}
                         aria-pressed={on}>
                         <span className="mark">{on?"✓":""}</span>
                         <span>{m.name} <span className="muted small">{m.position}</span></span>
@@ -3551,7 +3560,7 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
               </div>);
           })}
         <p className="muted small" style={{marginTop:14,marginBottom:0}}>{canEdit ? "이름을 누르면 출석/해제가 되고, 체크 즉시 서버에 저장됩니다." : "열람 권한으로 접속 중입니다. 출석 체크는 수정 권한이 있는 분만 할 수 있습니다."}
-          {" "}속마다·반마다 첫 칸(금색 테두리)은 속장·리더 자리입니다.</p>
+          {canOrder && saveOrder && " 속마다·반마다 첫 칸(금색 테두리)은 속장·리더 자리이며, 머리표의 [순서]로 바꿉니다."}</p>
       </div>
 
       <div className="panel">
