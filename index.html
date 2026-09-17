@@ -3000,6 +3000,7 @@ function MemberForm({init, onSave, onCancel}){
         <textarea rows="2" value={m.memo} onChange={e=>set("memo",e.target.value)} placeholder="특이사항, 신앙 배경 등"/></div>
 
       <h3>가족</h3>
+      <p className="muted small" style={{margin:"-4px 0 8px"}}>교인으로 등록된 가족은 나이·직분을 그분 기록에서 가져옵니다. 나이·직업 칸은 교인이 아닌 가족만 적으시면 됩니다.</p>
       {m.family.length===0 && <p className="muted small">등록된 가족이 없습니다.</p>}
       {m.family.map((f,i)=>(
         <div className="row" key={f.id} style={{marginBottom:8}}>
@@ -3145,16 +3146,24 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
                         onClick={()=>openMember(link.id)}>{nm} ↗</button>
                     : nm}</td>
                   <td>{(()=>{
-                    /* 교인으로 등록된 가족이면 그분 기록의 나이를 씁니다 */
-                    const a = link ? koAge(link.birth) : null;
-                    if(a !== null && a !== undefined) return a + "세";
+                    /* 교인으로 등록된 가족이면 그분 기록의 나이를 씁니다.
+                       기록 맨 위·교인 카드와 같은 만 나이로 셉니다 — 어느 화면에서 봐도 같은 나이 */
+                    if(link){
+                      const b = typeof link.birth === "string" ? link.birth : (link.birth == null ? "" : String(link.birth));
+                      const a = /^\d{4}-\d{2}-\d{2}$/.test(b) ? calcAge(b) : null;
+                      if(a !== null && a !== undefined && !isNaN(a)) return a + "세";
+                    }
                     return f.age && (/^\d{1,3}$/.test(String(f.age)) ? f.age + "세" : f.age);
                   })()}</td>
                   <td>{(()=>{
-                    if(f.job) return f.job;
-                    if(!link) return "";
-                    const now = (link.depts||[]).filter(d=>d.current).map(d=>d.name);
-                    return [link.position, ...now].filter(Boolean).join(" · ");
+                    /* 교인으로 등록된 가족이면 손으로 적은 값 대신 그분 기록(직분 · 지금 봉사 중인 부서)을 씁니다.
+                       그래야 부모·자녀 누구의 기록에서 봐도 같게 나옵니다. 기록에 아무것도 없을 때만 적어 둔 값을 씁니다 */
+                    if(link){
+                      const now = (Array.isArray(link.depts) ? link.depts : []).filter(d=>d && d.current).map(d=>d.name);
+                      const auto = [link.position, ...now].filter(Boolean).join(" · ");
+                      if(auto) return auto;
+                    }
+                    return f.job || "";
                   })()}</td>
                 </tr>);
             })}
