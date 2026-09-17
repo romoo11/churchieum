@@ -680,6 +680,8 @@ const {useState, useEffect, useMemo, useRef, useCallback} = React;
 /* ───────── 공통 ───────── */
 const CFG_KEY = "church-app-server-config";
 const PICK_KEY = "church-app-picked-church";
+/* 이번 창에서 스스로 교회 고르기로 나왔는지 — 나왔으면 바로 들어가기를 하지 않습니다 */
+const LEFT_KEY = "church-app-left-picker";
 // ▼▼ 아래 두 줄에 서버 정보를 넣으면 '처음 설정' 화면 없이 링크만으로 접속됩니다 ▼▼
 const EMBED_URL = "https://phrouczwgefjshqtrzom.supabase.co";
 const EMBED_KEY = "sb_publishable_j-H0uwFOIx7x8y8zapJfAQ_RK_llEpj";
@@ -1608,6 +1610,7 @@ function ChurchPicker({sb, session, logout, onPick}){
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const pickRef = useRef(onPick); pickRef.current = onPick;   /* 바로 들어가기에 쓰는 값 */
 
   const load = useCallback(async ()=>{
     setErr("");
@@ -1615,15 +1618,25 @@ function ChurchPicker({sb, session, logout, onPick}){
       .select("church_id, role, churches(name, join_code)")
       .eq("user_id", session.user.id);
     if(error){ setErr(errMsg(error)); setRows([]); return; }
-    setRows((data||[]).map(r=>({
+    const list = (Array.isArray(data) ? data : []).filter(r => r && r.church_id).map(r=>({
       id: r.church_id, role: r.role,
       name: (r.churches && r.churches.name) || "이름 없는 교회",
       code: (r.churches && r.churches.join_code) || "",
-    })));
+    }));
+    const ow = await sb.rpc("is_app_owner");
+    const owner = !ow.error && ow.data === true;
+    setIsOwner(owner);
+    /* 속한 교회가 하나뿐이고 승인까지 되었으면 목록을 건너뛰고 바로 들어갑니다.
+       운영자이거나, 이번 창에서 [교회 바꾸기]로 스스로 나온 경우는 목록을 보여 줍니다. */
+    let left = false;
+    try{ left = sessionStorage.getItem(LEFT_KEY) === "1"; }catch(_){}
+    if(!owner && !left && list.length === 1 && list[0].role && list[0].role !== "pending"){
+      pickRef.current(list[0].id);
+      return;
+    }
+    setRows(list);
     const can = await sb.rpc("can_create_church");
     if(!can.error) setCanMake(can.data !== false);
-    const ow = await sb.rpc("is_app_owner");
-    if(!ow.error) setIsOwner(ow.data === true);
   }, [sb, session]);
   useEffect(()=>{ load(); }, [load]);
 
@@ -1765,7 +1778,7 @@ function Root(){
     try{ return localStorage.getItem(PICK_KEY) || ""; }catch(_){ return ""; }
   });
   const pickChurch = id => { try{ localStorage.setItem(PICK_KEY, id); }catch(_){} setChurchId(id); };
-  const leaveChurch = () => { try{ localStorage.removeItem(PICK_KEY); }catch(_){} setChurchId(""); setProfile(undefined); };
+  const leaveChurch = () => { try{ localStorage.removeItem(PICK_KEY); sessionStorage.setItem(LEFT_KEY, "1"); }catch(_){} setChurchId(""); setProfile(undefined); };
 
   const loadProfile = useCallback(async ()=>{
     if(!sb || !session || !churchId){ setProfile(undefined); return; }
