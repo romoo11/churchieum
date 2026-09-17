@@ -4239,18 +4239,24 @@ function Visits({members, update, openMember, canEdit, meName, meId}){
 }
 
 /* ───────── 중보기도 전체 ───────── */
-function Prayers({members, update, openMember, canEdit, seeSecret, openable, meName, meId}){
+function Prayers({members: members0, update, openMember, canEdit, seeSecret, openable, meName, meId}){
+  /* 자료가 어긋나도 멈추지 않게 — 빈 칸이 섞인 교인 목록 */
+  const members = (Array.isArray(members0) ? members0 : []).filter(m => m && typeof m === "object" && m.id != null);
   const [filter, setFilter] = useState("open");
   const [kind, setKind] = useState("all");     /* all | normal | secret */
   const [memId, setMemId] = useState("");
   const [req, setReq] = useState("");
   const [secret, setSecret] = useState(false);
 
-  const all = members.flatMap(m => (m.prayers||[]).map(p=>({...p, memId:m.id, memName:m.name})))
-    .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  /* 긴밀 기도 보기 권한이 없으면 긴밀 기도는 처음부터 빼고 셉니다 — 목록·숫자·단추 어디에도 드러나지 않게 */
+  const all = (Array.isArray(members) ? members : []).filter(Boolean)
+    .flatMap(m => (Array.isArray(m.prayers) ? m.prayers : []).filter(Boolean)
+      .map(p=>({...p, memId:m.id, memName:m.name})))
+    .filter(p => seeSecret || !p.secret)
+    .sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+  const kindNow = seeSecret ? kind : "all";
   const list = all.filter(p => (filter==="all" || p.status===filter)
-    && (seeSecret || !p.secret)
-    && (kind==="all" || (kind==="secret" ? !!p.secret : !p.secret)));
+    && (kindNow==="all" || (kindNow==="secret" ? !!p.secret : !p.secret)));
   const openN = all.filter(p=>p.status==="open").length;
 
   return (
@@ -4283,10 +4289,10 @@ function Prayers({members, update, openMember, canEdit, seeSecret, openable, meN
         <div className="row" style={{justifyContent:"space-between"}}>
           <h2 style={{margin:0}}>중보기도 <span className="muted small">요청중 {openN}건</span></h2>
           <div className="row" style={{gap:8}}>
-            <div className="svc-tabs" style={{margin:0}}>
+            {seeSecret && <div className="svc-tabs" style={{margin:0}}>
               {[["all","일반+긴밀"],["normal","일반"],["secret","긴밀"]].map(([k,l])=>(
                 <button key={k} className={kind===k?"on":""} onClick={()=>setKind(k)}>{l}</button>))}
-            </div>
+            </div>}
             <div className="svc-tabs" style={{margin:0}}>
               {[["open","요청중"],["answered","응답"],["all","전체"]].map(([k,l])=>(
                 <button key={k} className={filter===k?"on":""} onClick={()=>setFilter(k)}>{l}</button>))}
