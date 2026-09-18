@@ -682,6 +682,19 @@
     .list-tbl td.c-act:empty{display:none}
     .list-tbl td.c-date .muted{display:inline;margin-left:4px}
   }
+  /* 고르는 중에는 카드를 한 줄에 하나씩 — 체크 칸이 들어가 칸이 좁아지지 않게 */
+  .mem-list:has(.bulk-row){grid-template-columns:1fr}
+  .bulk-row{display:flex;align-items:center;gap:8px;cursor:pointer;min-width:0;width:100%}
+  .bulk-row .mem-card{width:100%}
+  .bulk-row > input{width:20px;height:20px;flex:none;accent-color:#22355C;cursor:pointer}
+  .bulk-row .bulk-card{flex:1 1 auto;min-width:0;display:block}
+  .bulk-row.on .bulk-card .mem-card{border-color:#22355C;box-shadow:0 0 0 2px rgba(34,53,92,.25)}
+  .bulk-bar{position:sticky;bottom:0;z-index:6;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+    background:rgba(255,255,255,.97);border:1px solid var(--line, #dde3ea);border-radius:12px;padding:10px 12px;
+    box-shadow:0 -4px 14px rgba(0,0,0,.08);margin-top:10px}
+  .bulk-bar .cnt{font-weight:700;color:#22355C}
+  @media (max-width:640px){ .bulk-bar{bottom:70px} }
+  @media print{ .bulk-bar, .bulk-row > input{display:none!important} }
   .order-save-bar{position:sticky;bottom:0;z-index:5;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
     background:rgba(255,255,255,.96);border:1px solid var(--line, #dde3ea);border-radius:12px;padding:10px 12px;
     box-shadow:0 -4px 14px rgba(0,0,0,.08);margin-top:6px}
@@ -943,6 +956,18 @@ const placeOrder = (allMembers, groupIds) => {
 };
 
 
+
+/* 여러 명 고치기 — 카드 왼쪽 체크 칸 */
+function BulkWrap({on, checked, toggle, children}){
+  if(!on) return children;
+  return (
+    <label className={"bulk-row" + (checked ? " on" : "")}>
+      <input type="checkbox" checked={checked} onChange={toggle}/>
+      <span className="bulk-card">{children}</span>
+    </label>
+  );
+}
+
 /* 교인 명부 [순서 정하기] — 직분마다 묶어 보여 주고, 한 번에 저장 */
 function MultiOrderEditor({groups, onSave, onClose}){
   const byId = {};
@@ -1173,6 +1198,28 @@ const applyChurchConfig = (c) => {
 };
 /* 속 개수에 맞춰 이름표 만들기 */
 const sokCount = g => (g==="여" ? SOK_F : SOK_M).length;
+
+/* ═══ 여러 명 한꺼번에 고치기 — 관리자 전용 ═══
+   직분 바꾸기: 고른 분 모두 그 직분이 됩니다.
+   속 편성하기: 직접 지정·주소 방식이면 교인 카드의 속을, 나이 방식이면 메모 표기(예 3여선교회)를 씁니다.
+   두 경우 모두 메모에 바뀐 내역을 한 줄 남깁니다. */
+const bulkNewData = (m, field, value, label) => {
+  const day = todayStr();
+  const memo0 = typeof m.memo === "string" ? m.memo : (m.memo == null ? "" : String(m.memo));
+  if(field === "position"){
+    const before = m.position || "(직분 없음)";
+    const memo = [memo0.trim(), `${day} ${before} → ${value}`].filter(Boolean).join("\n");
+    return {...m, position: value, memo};
+  }
+  /* 속 편성 */
+  const ageMode = !(SOK_MODE === "manual" || SOK_MODE === "area");
+  /* 앞서 적어 둔 속 배정 줄은 지웁니다 — 옛 표기가 먼저 읽히지 않도록 */
+  const kept = memo0.split("\n").filter(l => !/^\s*\d{4}-\d{2}-\d{2}\s*속 배정 →/.test(l)).join("\n").trim();
+  const mark = ageMode ? (String(value).slice(1) + String(value).slice(0,1) + "선교회") : label;
+  const memo = [kept, `${day} 속 배정 → ${mark}`].filter(Boolean).join("\n");
+  return ageMode ? {...m, memo} : {...m, sok: value, memo};
+};
+
 /* 설정된 속 개수에 맞춘 키 목록: 남1..남n, 여1..여m */
 const sokKeys = () => (SOK_MODE === "manual" || SOK_MODE === "area")
   ? SOK_LIST.map(s=>s.id)
@@ -1984,6 +2031,21 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     const cur = members.find(x=>x.id===id); if(!cur) return;
     saveMemberRow(fn(cur));
   };
+  /* 여러 명 고치기 — 서버의 bulk_save_members 가 관리자인지 다시 확인합니다 */
+  const bulkSaveMembers = async (rows) => {
+    const {data, error} = await sb.rpc("bulk_save_members", {c: churchId, rows});
+    if(error){
+      const msg = String(error.message || "");
+      if(/function|does not exist|찾을 수 없/i.test(msg))
+        alert("서버에 '여러 명 고치기' 기능이 아직 없습니다.\n교회이음에 문의해 주세요. (bulk_save_members)");
+      else alert("바꾸지 못했습니다. " + errMsg(error));
+      loadAll();
+      throw error;
+    }
+    setMembers(ms => ms.map(x => { const n = rows.find(r=>r.id===x.id); return n ? n : x; }));
+    return data;
+  };
+
   const removeMember = async (id) => {
     setMembers(ms=>ms.filter(x=>x.id!==id));
     const {error} = await sb.from("members").delete().eq("church_id", churchId).eq("id", id);
@@ -2287,6 +2349,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             schoolClasses={schoolClasses} saveClasses={saveClasses}
             canOrder={canOrder} saveOrder={saveOrder} orderVer={memberOrder.length}
             canFix={canEdit || listEnts.some(isW)}
+            canBulk={isAdmin} bulkSave={bulkSaveMembers}
             canEditClass={(deptKey)=> canEdit ||
               listEnts.some(e => isW(e) && (entKey(e)==="S_ALL" || entKey(e)==="S_"+deptKey))}/> :
           memView.mode==="form" && memView.id && !canEditMember(byId(memView.id))
@@ -2789,7 +2852,11 @@ function SchoolDept({g, canEdit, setMemView, data, saveDept, canOrder, saveOrder
   );
 }
 
-function MemberList({members: members0, setMemView, canEdit, schoolClasses, saveClasses, canEditClass, canOrder, saveOrder, canFix = false}){
+function MemberList({members: members0, setMemView, canEdit, schoolClasses, saveClasses, canEditClass, canOrder, saveOrder, canFix = false, canBulk = false, bulkSave}){
+  const [bulk, setBulk] = useState(false);          /* 여러 명 고치기 중인가 */
+  const [sel, setSel] = useState([]);               /* 고른 교인 id */
+  const [bulkVal, setBulkVal] = useState("");       /* 새 직분 또는 새 속 */
+  const [busy, setBusy] = useState(false);
   /* 자료가 조금 어긋나 있어도 화면이 멈추지 않게 합니다 — 빈 칸·숫자로 들어간 생년월일·이름 없는 교인 */
   const str = v => v == null ? "" : String(v);
   const members = useMemo(() => (Array.isArray(members0) ? members0 : [])
@@ -2813,6 +2880,39 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
     .filter(m => book!=="all" || mode==="order" || pos==="전체" || m.position===pos)
     .filter(m => (book==="all" && mode==="order") || !q || (m.name+m.phone+m.address).includes(q))
     .sort((book==="all" && mode==="name") ? koSort : orderSort);   /* 가나다순 보기만 가나다, 나머지는 교회가 정한 순서 */
+  /* 여러 명 고치기 — 지금 화면이 무엇을 바꿀지 정합니다 */
+  const bulkField = book==="sok" ? "sok" : "position";
+  const bulkOpts  = bulkField==="position"
+    ? POSITIONS.map(p=>({v:p, l:p}))
+    : sokKeys().map(k=>({v:k, l:sokKeyLabel(k)}));
+  const bulkLabel = (bulkOpts.find(o=>o.v===bulkVal)||{}).l || "";
+  const shown = list.filter(m => m && m.id != null);
+  const toggleOne = id => setSel(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
+  const allShown = shown.length>0 && shown.every(m=>sel.includes(m.id));
+  const toggleAllShown = () => setSel(s => allShown ? s.filter(id=>!shown.some(m=>m.id===id)) : [...new Set([...s, ...shown.map(m=>m.id)])]);
+  const applyBulk = async () => {
+    if(!bulkVal || sel.length===0) return;
+    const picked = shown.filter(m=>sel.includes(m.id));
+    /* 속 편성에서 빠지는 분(교역자·사모·청년)은 제외합니다 */
+    const skip = bulkField==="sok" ? picked.filter(m=>isMinister(m)||isSamo(m)||isYoungAdult(m)) : [];
+    const targets = picked.filter(m=>!skip.includes(m));
+    if(targets.length===0){ alert("고르신 분들은 속 편성 대상이 아닙니다. (교역자·사모·청년)"); return; }
+    const msg = bulkField==="position"
+      ? `${targets.length}명을 ${bulkVal}로 바꿉니다.`
+      : `${targets.length}명을 ${bulkLabel}으로 옮깁니다.`;
+    const extra = skip.length ? `\n\n교역자·사모·청년 ${skip.length}명은 속 편성에서 빠지므로 그대로 둡니다.` : "";
+    const warn = (bulkField==="sok" && !(SOK_MODE==="manual" || SOK_MODE==="area"))
+      ? "\n\n※ 이 교회는 나이로 자동 배정하는 방식입니다. 속을 직접 정하면 그분들은 자동 배정에서 빠져 이 속으로 고정됩니다." : "";
+    if(!confirm(msg + extra + warn + "\n\n바뀐 내용은 각자 메모에 한 줄 남습니다.")) return;
+    setBusy(true);
+    try{
+      await bulkSave(targets.map(m => bulkNewData(m, bulkField, bulkVal, bulkLabel)));
+      setSel([]); setBulkVal(""); setBulk(false);
+      alert(`${targets.length}명을 고쳤습니다.`);
+    }catch(e){ /* 알림은 App 에서 */ }
+    finally{ setBusy(false); }
+  };
+
   const orderBtn = key => (canOrder && saveOrder && !q)
     ? <button type="button" className="btn sm ghost grp-order-btn" onClick={()=>setOrdering(ordering===key ? null : key)}>
         {ordering===key ? "순서 닫기" : "순서"}</button> : null;
@@ -2889,12 +2989,35 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
             {canOrder && saveOrder &&
               <button className={mode==="order"?"on":""} onClick={()=>{ setOrdering(null); setMode("order"); }}>순서 정하기</button>}
           </div>}
+          {canBulk && bulkSave && book!=="school" && mode!=="order" &&
+            <button className={"btn sm ghost" + (bulk ? " on" : "")} style={{marginLeft:8}}
+              onClick={()=>{ setBulk(!bulk); setSel([]); setBulkVal(""); }}>
+              {bulk ? "여러 명 고치기 끝내기" : "여러 명 고치기"}</button>}
         </div>
         {(book==="sok" || book==="school") && canOrder && saveOrder &&   /* 안내글은 고칠 수 있는 분에게만 */
           <p className="lead-note"><i></i>{book==="sok" ? "속마다" : "반마다"} 첫 칸(금색 테두리)은 {book==="sok" ? "속장" : "리더"} 자리입니다.
             {" "}순서는 머리표의 [순서] 단추로 바꿉니다.</p>}
       </div>
 
+        {bulk && canBulk && bulkSave &&
+          <div className="bulk-bar">
+            <span className="cnt">{sel.length}명 선택</span>
+            <button className="btn sm ghost" onClick={toggleAllShown} disabled={busy}>
+              {allShown ? "보이는 사람 모두 해제" : "보이는 사람 모두 선택"}</button>
+            <select value={bulkVal} onChange={e=>setBulkVal(e.target.value)} disabled={busy} style={{minWidth:140}}>
+              <option value="">{bulkField==="position" ? "새 직분 고르기…" : "옮길 속 고르기…"}</option>
+              {bulkOpts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+            <button className="btn" onClick={applyBulk} disabled={busy || !bulkVal || sel.length===0}>
+              {busy ? "바꾸는 중…" : (bulkField==="position" ? "직분 바꾸기" : "속 옮기기")}</button>
+            <button className="btn ghost" onClick={()=>{ setBulk(false); setSel([]); setBulkVal(""); }} disabled={busy}>취소</button>
+            <span className="muted small" style={{flexBasis:"100%"}}>
+              {bulkField==="position"
+                ? "고른 분은 원래 직분과 상관없이 모두 새 직분이 됩니다."
+                : (SOK_MODE==="manual" || SOK_MODE==="area")
+                  ? "고른 분의 속을 직접 지정합니다. 주소 방식이면 주소보다 이 지정이 우선합니다."
+                  : "이 교회는 나이로 자동 배정합니다. 직접 지정하면 그분들은 자동 배정에서 빠져 고정됩니다."}</span>
+          </div>}
       {list.length===0 ? <div className="panel empty">조건에 맞는 교인이 없습니다.</div> :
        book==="school" ?
         <div>
@@ -2921,8 +3044,10 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
                     leadLabel={isSokLeadKey(g.key) ? "속장 자리" : null}/>
                 : <div className="mem-list">
                 {g.items.map((m, idx)=>(
-                  <MemberCard key={m.id} m={m} onClick={()=>setMemView({mode:"detail", id:m.id})}
+                  <BulkWrap key={m.id} on={bulk} checked={sel.includes(m.id)} toggle={()=>toggleOne(m.id)}>
+                  <MemberCard m={m} onClick={()=>{ if(bulk) toggleOne(m.id); else setMemView({mode:"detail", id:m.id}); }}
                     lead={idx===0 && isSokLeadKey(g.key)} leadLabel={canOrder && saveOrder ? "속장 자리" : null}/>
+                  </BulkWrap>
                 ))}
               </div>}
             </div>
@@ -2934,7 +3059,9 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
        : mode==="name" ?
         <div className="mem-list">
           {list.map(m=>(
-            <MemberCard key={m.id} m={m} onClick={()=>setMemView({mode:"detail", id:m.id})}/>
+            <BulkWrap key={m.id} on={bulk} checked={sel.includes(m.id)} toggle={()=>toggleOne(m.id)}>
+            <MemberCard m={m} onClick={()=>{ if(bulk) toggleOne(m.id); else setMemView({mode:"detail", id:m.id}); }}/>
+            </BulkWrap>
           ))}
         </div>
        :
@@ -2946,7 +3073,9 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
                 ? <OrderEditor items={g.items} onSave={saveOrder} onClose={()=>setOrdering(null)}/>
                 : <div className="mem-list">
                 {g.items.map(m=>(
-                  <MemberCard key={m.id} m={m} onClick={()=>setMemView({mode:"detail", id:m.id})}/>
+                  <BulkWrap key={m.id} on={bulk} checked={sel.includes(m.id)} toggle={()=>toggleOne(m.id)}>
+                  <MemberCard m={m} onClick={()=>{ if(bulk) toggleOne(m.id); else setMemView({mode:"detail", id:m.id}); }}/>
+                  </BulkWrap>
                 ))}
               </div>}
             </div>
