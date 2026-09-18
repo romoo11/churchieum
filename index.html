@@ -1000,7 +1000,7 @@ function MultiOrderEditor({groups, onSave, onClose}){
   return (
     <div>
       <div className="panel" style={{padding:"12px 16px"}}>
-        <b>교인 순서 정하기</b>
+        <b>순서</b>
         <p className="muted small" style={{margin:"4px 0 0"}}>
           같은 직분 안에서 <b>▲ ▼</b>로 한 칸씩, <b>⤒</b>로 맨 위로 옮기고 아래 <b>순서 저장</b>을 눌러 주세요.
           선임을 앞에 두시면 됩니다. 저장한 순서는 직분별 명부 · 속별 명부 · 출석 체크에 함께 쓰이고,
@@ -2037,7 +2037,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     if(error){
       const msg = String(error.message || "");
       if(/function|does not exist|찾을 수 없/i.test(msg))
-        alert("서버에 '여러 명 고치기' 기능이 아직 없습니다.\n교회이음에 문의해 주세요. (bulk_save_members)");
+        alert("서버에 '단체수정' 기능이 아직 없습니다.\n교회이음에 문의해 주세요. (bulk_save_members)");
       else alert("바꾸지 못했습니다. " + errMsg(error));
       loadAll();
       throw error;
@@ -2283,7 +2283,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
               title="시작 화면으로">
               <Logo/>
             </button>
-            <button onClick={isAdmin ? renameChurch : undefined} title={isAdmin?"교회 이름 바꾸기":""}>{churchName} 교인 관리</button>
+            <button onClick={isAdmin ? renameChurch : undefined} title={isAdmin?"교회 이름 수정":""}>{churchName} 교인 관리</button>
           </div>
           <button className={"back-btn"+(histLen>0?"":" off")} onClick={goBack}
             title="이전 화면으로" aria-hidden={histLen===0} tabIndex={histLen>0?0:-1}>‹ 뒤로</button>
@@ -2447,7 +2447,7 @@ function abilityOf(role, ents){
       can.push("교인 신상 수정(" + nm + ") · 출석 체크(" + nm + ")");
     }
     if(wr.some(e => key(e) === ATT_ONLY)) can.push("출석 체크(성도 전체)");
-    if(!wr.length) cant.push("고치기 안 됨 · 출석 체크 안 됨 (모두 열람으로 주셨습니다)");
+    if(!wr.length) cant.push("수정 안 됨 · 출석 체크 안 됨 (모두 열람으로 주셨습니다)");
   }
   if(seeV) can.push("심방 기록 전체 보기");
   if(seeS) can.push("긴밀 기도 보기");
@@ -2787,7 +2787,7 @@ function SchoolDept({g, canEdit, setMemView, data, saveDept, canOrder, saveOrder
       <div className={"cls-head"+(none?" none":"")}>
         <span className="nm">{name}</span>
         <span className="ct">{items.length}명</span>
-        {mayOrder && <button type="button" className="btn sm ghost ord-btn" style={{marginLeft:"auto",padding:"2px 10px"}} title="순서 바꾸기" aria-label="순서 바꾸기"
+        {mayOrder && <button type="button" className="btn sm ghost ord-btn" style={{marginLeft:"auto",padding:"2px 10px"}} title="순서" aria-label="순서"
           onClick={()=>setOrdering(isOrdering ? null : rowKey)}>{isOrdering ? "순서 닫기" : <React.Fragment><span className="ord-ico" aria-hidden="true">⇅</span><span className="ord-t">순서</span></React.Fragment>}</button>}
       </div>
       {items.length===0
@@ -2987,16 +2987,16 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
             <button className={mode==="pos"?"on":""} onClick={()=>setMode("pos")}>직분별</button>
             <button className={mode==="name"?"on":""} onClick={()=>setMode("name")}>가나다순</button>
             {canOrder && saveOrder &&
-              <button className={mode==="order"?"on":""} onClick={()=>{ setOrdering(null); setMode("order"); }}>순서 정하기</button>}
+              <button className={mode==="order"?"on":""} onClick={()=>{ setOrdering(null); setMode("order"); }}>순서</button>}
           </div>}
           {canBulk && bulkSave && book!=="school" && mode!=="order" &&
             <button className={"btn sm ghost" + (bulk ? " on" : "")} style={{marginLeft:8}}
               onClick={()=>{ setBulk(!bulk); setSel([]); setBulkVal(""); }}>
-              {bulk ? "여러 명 고치기 끝내기" : "여러 명 고치기"}</button>}
+              {bulk ? "단체수정 끝내기" : "단체수정"}</button>}
         </div>
         {(book==="sok" || book==="school") && canOrder && saveOrder &&   /* 안내글은 고칠 수 있는 분에게만 */
           <p className="lead-note"><i></i>{book==="sok" ? "속마다" : "반마다"} 첫 칸(금색 테두리)은 {book==="sok" ? "속장" : "리더"} 자리입니다.
-            {" "}순서는 머리표의 [순서] 단추로 바꿉니다.</p>}
+            {" "}순서는 머리표의 [순서] 단추로 수정합니다.</p>}
       </div>
 
         {bulk && canBulk && bulkSave &&
@@ -3035,7 +3035,7 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
           {sokGroups.map(g=>(
             <div key={g.key} style={{marginBottom:18}}>
               <DeptHead sKey={g.key==="zz" ? "" : g.key} name={g.label} count={g.items.length+"명"}
-                right={canOrder && saveOrder && !q && <button type="button" className="ord-btn" title="순서 바꾸기" aria-label="순서 바꾸기" onClick={()=>setOrdering(ordering==="sok:"+g.key ? null : "sok:"+g.key)}>
+                right={canOrder && saveOrder && !q && <button type="button" className="ord-btn" title="순서" aria-label="순서" onClick={()=>setOrdering(ordering==="sok:"+g.key ? null : "sok:"+g.key)}>
                   {ordering==="sok:"+g.key ? "순서 닫기" : <React.Fragment><span className="ord-ico" aria-hidden="true">⇅</span><span className="ord-t">순서</span></React.Fragment>}</button>}/>
               {g.key==="zz" && canFix && <p className="muted small" style={{margin:"0 0 8px"}}>
                 성별·생년월일이 없어 속을 정하지 못했습니다. '정보 수정'에서 성별과 생년월일을 넣으면 자동 배정됩니다.</p>}
@@ -3629,7 +3629,7 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
 
         {spForm && isAdmin &&
           <div className="panel" style={{padding:"14px 16px", marginBottom:12}}>
-            <h3 style={{marginTop:0}}>{spForm.key ? "특별예배 고치기" : "새 특별예배"}</h3>
+            <h3 style={{marginTop:0}}>{spForm.key ? "특별예배" : "새 특별예배"}</h3>
             <p className="small muted" style={{marginTop:0}}>
               특별새벽기도회처럼 일정 기간 매일 드리는 예배를 만들 수 있습니다. 기간 안의 날짜를 골라 매일 출석을 체크하시면 됩니다.</p>
             <div className="field"><label>이름</label>
@@ -3668,7 +3668,7 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
             <span className="muted small"> {svcObj.from.replace(/-/g,".")} ~ {svcObj.to.replace(/-/g,".")}
               · 모두 {Math.round((new Date(svcObj.to)-new Date(svcObj.from))/86400000)+1}일</span>
             {isAdmin && <button className="btn sm ghost" style={{marginLeft:"auto"}}
-              onClick={()=>setSpForm({key:svcObj.key, label:svcObj.label, from:svcObj.from, to:svcObj.to})}>고치기</button>}
+              onClick={()=>setSpForm({key:svcObj.key, label:svcObj.label, from:svcObj.from, to:svcObj.to})}>수정</button>}
           </div>}
         <div className="row">
           <input type="date" value={date} onChange={e=>setDate(e.target.value)}/>
@@ -3706,14 +3706,14 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
                   ? <div className={"cls-head"+(g.none?" none":"")}>
                       <span className="nm">{g.label}</span>
                       <span className="ct">{onCount} / {g.items.length}명</span>
-                      {mayOrder && <button className="btn sm ghost ord-btn" style={{marginLeft:"auto",padding:"2px 10px"}} title="순서 바꾸기" aria-label="순서 바꾸기"
+                      {mayOrder && <button className="btn sm ghost ord-btn" style={{marginLeft:"auto",padding:"2px 10px"}} title="순서" aria-label="순서"
                         onClick={()=>setOrdering(isOrdering ? null : g.key)}>{isOrdering ? "순서 닫기" : <React.Fragment><span className="ord-ico" aria-hidden="true">⇅</span><span className="ord-t">순서</span></React.Fragment>}</button>}
                       {canEdit && !isOrdering && <button className="btn sm ghost" style={{marginLeft: mayOrder ? 6 : "auto",padding:"2px 10px"}}
                         onClick={()=>toggleGroup(g)}>{allOn ? "반 해제" : "반 체크"}</button>}
                     </div>
                   : <DeptHead sKey={g.key} name={g.label} count={onCount + " / " + g.items.length + "명"}
                       right={(mayOrder || canEdit) && <React.Fragment>
-                        {mayOrder && <button type="button" className="ord-btn" title="순서 바꾸기" aria-label="순서 바꾸기" onClick={()=>setOrdering(isOrdering ? null : g.key)}>{isOrdering ? "순서 닫기" : <React.Fragment><span className="ord-ico" aria-hidden="true">⇅</span><span className="ord-t">순서</span></React.Fragment>}</button>}
+                        {mayOrder && <button type="button" className="ord-btn" title="순서" aria-label="순서" onClick={()=>setOrdering(isOrdering ? null : g.key)}>{isOrdering ? "순서 닫기" : <React.Fragment><span className="ord-ico" aria-hidden="true">⇅</span><span className="ord-t">순서</span></React.Fragment>}</button>}
                         {canEdit && !isOrdering && <button onClick={()=>toggleGroup(g)}>{allOn ? "전체 해제" : "전체 체크"}</button>}
                       </React.Fragment>}/>}
                 {isOrdering
@@ -4249,7 +4249,7 @@ function Calendar({members, events, saveEvents, canEdit, openMember, openable}){
 
       {form && canEdit &&
         <div className="panel">
-          <h2>{form.id ? "행사 고치기" : "새 행사"}</h2>
+          <h2>{form.id ? "행사" : "새 행사"}</h2>
           <div className="field"><label>행사 이름</label>
             <input value={form.title} onChange={e=>setForm({...form, title:e.target.value})}
               placeholder="예) 추수감사주일, 여름성경학교"/></div>
@@ -4292,7 +4292,7 @@ function Calendar({members, events, saveEvents, canEdit, openMember, openable}){
                     {e.place && <div className="muted small">{e.place}</div>}
                     {e.note && <div className="small" style={{whiteSpace:"pre-wrap"}}>{e.note}</div>}
                   </div>
-                  {canEdit && <button className="btn sm ghost" onClick={()=>setForm(e)}>고치기</button>}
+                  {canEdit && <button className="btn sm ghost" onClick={()=>setForm(e)}>수정</button>}
                 </div>))}
               {selBirth.map(m=>(
                 <div key={m.id} className="cal-item">
