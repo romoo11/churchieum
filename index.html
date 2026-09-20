@@ -439,7 +439,17 @@
     0 3px 9px rgba(34,53,92,.22)}
   .mem-card:active{transform:translateY(1px)}
   .mem-card .nm{font-family:"Gowun Batang",serif;font-size:15.5px;font-weight:700;
-    color:var(--pine-deep);text-shadow:0 1px 0 rgba(255,255,255,.8)}
+    color:var(--pine-deep);text-shadow:0 1px 0 rgba(255,255,255,.8);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  /* 이름 줄 — 이름과 직분이 늘 한 줄에 (이름이 길면 이름만 줄어듭니다) */
+  /* 이름 줄 높이를 고정해 글자가 줄어들어도 카드 크기가 같게 합니다 */
+  .mc-name-row{display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:nowrap;min-width:0;
+    height:22px}
+  .mem-card .nm{line-height:22px}
+  .mem-card .sub{line-height:16px;height:16px}
+  .mc-name-row .chip.pos{flex:none}
+  .mem-card .mc-name-row .chip.pos{font-size:10.5px;padding:1px 6px}
+  @media (max-width:560px){ .mem-card .mc-name-row .chip.pos{font-size:10px;padding:1px 5px} }
   .mem-card .sub{color:var(--muted);font-size:11.5px;margin-top:1px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mc-top{display:flex;gap:8px;align-items:center}
@@ -2070,6 +2080,46 @@ function App({sb, profile, logout, churchId, leaveChurch}){
       if(e2){ fail(e2); loadAll(); }
     }
   };
+  /* 출석 — 서버에서 최신 명단을 읽어 누른 사람만 더하거나 뺍니다.
+     예전처럼 명단 전체를 덮어쓰지 않으므로, 여러 속장이 동시에 체크해도 서로 지워지지 않습니다. */
+  const markAtt = async (date, service, ids, on) => {
+    const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
+    if(!list.length) return;
+    setAtt(a => {
+      const cur = (a[date] && a[date][service]) || [];
+      const next = on ? [...cur, ...list.filter(id => !cur.includes(id))] : cur.filter(id => !list.includes(id));
+      return {...a, [date]: {...(a[date] || {}), [service]: next}};
+    });
+    const {data, error} = await sb.rpc("att_mark", {c: churchId, p_date: date, p_service: service, p_ids: list, p_on: !!on});
+    if(error){
+      const msg = String(error.message || "");
+      if(/function|does not exist|찾을 수 없/i.test(msg)) return markAttFallback(date, service, list, on);
+      fail(error); return refreshAtt();
+    }
+    if(Array.isArray(data)) setAtt(a => ({...a, [date]: {...(a[date] || {}), [service]: data}}));
+  };
+
+  /* 서버에 att_mark 기능이 아직 없을 때 — 최신 명단을 읽어 합친 뒤 저장합니다 */
+  const markAttFallback = async (date, service, list, on) => {
+    const {data, error} = await sb.from("attendance").select("ids")
+      .eq("church_id", churchId).eq("date", date).eq("service", service).maybeSingle();
+    if(error){ fail(error); return refreshAtt(); }
+    const cur = (data && Array.isArray(data.ids)) ? data.ids : [];
+    const next = on ? [...cur, ...list.filter(id => !cur.includes(id))] : cur.filter(id => !list.includes(id));
+    const {error: e2} = await sb.from("attendance").upsert({church_id: churchId, date, service, ids: next});
+    if(e2){ fail(e2); return refreshAtt(); }
+    setAtt(a => ({...a, [date]: {...(a[date] || {}), [service]: next}}));
+  };
+
+  /* 출석 기록만 다시 불러오기 (다른 분이 체크한 것을 받아 옵니다) */
+  const refreshAtt = async () => {
+    const {data, error} = await sb.from("attendance").select("date,service,ids").eq("church_id", churchId);
+    if(error || !Array.isArray(data)) return;
+    const na = {};
+    data.forEach(r => { if(!r) return; na[r.date] = {...(na[r.date] || {}), [r.service]: Array.isArray(r.ids) ? r.ids : []}; });
+    setAtt(na);
+  };
+
   const saveAtt = async (date, service, ids) => {
     setAtt(a=>({...a, [date]:{...(a[date]||{}), [service]:ids}}));
     const {error} = await sb.from("attendance")
@@ -2382,7 +2432,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             }}
             printChurch={churchName}/>
         )}
-        {view==="att" && <Attendance members={attMembers} att={att} saveAtt={saveAtt}
+        {view==="att" && <Attendance members={attMembers} att={att} saveAtt={saveAtt} markAtt={markAtt} refreshAtt={refreshAtt}
           canEdit={canCheckAtt}
           canCheckMember={canCheckMember}
           schoolClasses={schoolClasses} specials={specials} saveSpecials={saveSpecials} isAdmin={isAdmin || canEdit}
@@ -2739,8 +2789,25 @@ function Home({churchName, homePhoto, members, att, go, openMember,
 
 /* ───────── 교인 목록 ───────── */
 function MemberCard({m, onClick, lead, leadLabel}){
-  const age = calcAge(m.birth);
-  const cur = (m.depts||[]).filter(d=>d.current).map(d=>d.name).join(", ");
+  /* 이름이 길어도 카드 크기가 그대로이도록, 한 줄에 들어갈 때까지 글자와 자간을 줄입니다 */
+  const nameLen = String(m && m.name || "").replace(/\s/g, "").length;
+  const nmStyle = nameLen >= 6 ? {fontSize:"12.8px", letterSpacing:"-0.6px"}
+                : nameLen === 5 ? {fontSize:"13.6px", letterSpacing:"-0.5px"}
+                : nameLen === 4 ? {fontSize:"14.3px", letterSpacing:"-0.3px"} : undefined;
+  const nmRef = useRef(null);
+  useEffect(() => {
+    const el = nmRef.current;
+    if(!el || nameLen < 4) return;                  /* 세 글자까지는 손대지 않습니다 */
+    let size = parseFloat(getComputedStyle(el).fontSize) || 15.5;
+    let guard = 0;
+    const narrow = typeof window !== "undefined" && window.innerWidth <= 560;
+    const minSize = nameLen >= 6 ? 10.5 : (narrow ? 11 : 12.2);   /* 좁은 화면·긴 이름은 조금 더 줄입니다 */
+    while(el.scrollWidth > el.clientWidth + 0.5 && size > minSize && guard++ < 10){
+      size -= 0.5;
+      el.style.fontSize = size.toFixed(1) + "px";
+      el.style.letterSpacing = (size < 13 ? "-0.7px" : "-0.4px");
+    }
+  }, [m && m.name, m && m.position]);
   return (
     <button className={"mem-card" + (lead ? " lead" : "")} onClick={onClick} title={lead && leadLabel ? leadLabel : undefined}>
       <div className="mc-top">
@@ -2748,12 +2815,11 @@ function MemberCard({m, onClick, lead, leadLabel}){
           ? <img className="mem-avatar" src={m.photo} alt=""/>
           : <span className="mem-avatar ph">{(m.name||"?").slice(0,1)}</span>}
         <div style={{flex:"1 1 auto", minWidth:0}}>
-          <div className="row" style={{justifyContent:"space-between"}}>
-            <span className="nm">{m.name}</span>
+          <div className="mc-name-row">
+            <span className="nm" ref={nmRef} style={nmStyle}>{m.name}</span>
             <span className="chip pos">{m.position||"성도"}</span>
           </div>
-          <div className="sub">{age!==null ? `${age}세 · ` : ""}{m.phone || "연락처 없음"}</div>
-          {cur && <div className="sub">봉사: {cur}</div>}
+          {/* 명부 첫 화면에는 이름과 직분만 — 나이·연락처·봉사는 이름을 눌러 기록에서 봅니다 */}
         </div>
       </div>
     </button>
@@ -3442,7 +3508,7 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
 }
 
 /* ───────── 출석 체크 ───────── */
-function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMember, schoolClasses, specials, saveSpecials, isAdmin, canOrder, saveOrder, orderVer}){
+function Attendance({members: members0, att: att0, saveAtt, markAtt, refreshAtt, canEdit, canCheckMember, schoolClasses, specials, saveSpecials, isAdmin, canOrder, saveOrder, orderVer}){
   const [ordering, setOrdering] = useState(null);   /* 순서를 바꾸는 중인 묶음 */
   /* 자료가 조금 어긋나 있어도 화면이 멈추지 않게 합니다 — 빈 칸·이름 없는 교인·비어 있는 출석 날짜 */
   const members = useMemo(() => (Array.isArray(members0) ? members0 : [])
@@ -3488,9 +3554,19 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
     if(!canEdit) return;
     const who = members.find(m => m.id === id);
     if(who && !mayCheck(who)) return;          /* 담당 밖 교인은 손대지 않습니다 */
-    const ids = checked.includes(id) ? checked.filter(x=>x!==id) : [...checked, id];
-    saveAtt(date, svc, ids);
+    if(markAtt) markAtt(date, svc, [id], !checked.includes(id));
+    else saveAtt(date, svc, checked.includes(id) ? checked.filter(x=>x!==id) : [...checked, id]);
   };
+
+  /* 다른 분이 체크한 것을 받아 오기 — 이 화면을 보고 있는 동안 30초마다, 화면으로 돌아올 때도 */
+  useEffect(() => {
+    if(!refreshAtt) return;
+    const tick = () => { if(!document.hidden) refreshAtt(); };
+    const timer = setInterval(tick, 30000);
+    window.addEventListener("focus", tick);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(timer); window.removeEventListener("focus", tick); document.removeEventListener("visibilitychange", tick); };
+  }, [refreshAtt]);
   const clearAll = () => {
     if(checked.length && confirm(`${date} ${svcObj.label} 출석 체크를 모두 해제할까요?`))
       saveAtt(date, svc, []);
@@ -3583,8 +3659,9 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
       .flatMap(g=>g.items.filter(mayCheck).map(m=>m.id));
     if(!ids.length) return;
     const allOn = ids.every(id=>checked.includes(id));
-    saveAtt(date, svc, allOn ? checked.filter(id=>!ids.includes(id))
-                             : [...checked, ...ids.filter(id=>!checked.includes(id))]);
+    if(markAtt) markAtt(date, svc, ids, !allOn);
+    else saveAtt(date, svc, allOn ? checked.filter(id=>!ids.includes(id))
+                                  : [...checked, ...ids.filter(id=>!checked.includes(id))]);
   };
 
   const toggleGroup = g => {
@@ -3592,8 +3669,9 @@ function Attendance({members: members0, att: att0, saveAtt, canEdit, canCheckMem
     const ids = g.items.filter(mayCheck).map(m=>m.id);
     if(!ids.length) return;
     const allOn = ids.every(id=>checked.includes(id));
-    saveAtt(date, svc, allOn ? checked.filter(id=>!ids.includes(id))
-                             : [...checked, ...ids.filter(id=>!checked.includes(id))]);
+    if(markAtt) markAtt(date, svc, ids, !allOn);
+    else saveAtt(date, svc, allOn ? checked.filter(id=>!ids.includes(id))
+                                  : [...checked, ...ids.filter(id=>!checked.includes(id))]);
   };
   const gTitle = {margin:0, fontSize:"16px", color:"var(--pine-deep)",
     borderBottom:"2px solid var(--gold)", display:"inline-block", paddingBottom:"2px"};
