@@ -961,7 +961,7 @@ const orderSort = (a, b) => {
 /* 첫 칸을 속장·리더 자리로 표시할 묶음인가 — 교역자·사모·미지정·방문자·미배정은 제외 */
 const isSokLeadKey = key => {
   const k = String(key == null ? "" : key);
-  return !!k && k !== "zz" && k !== "SAMO" && k !== "GUEST" && k.indexOf("MIN") !== 0
+  return !!k && k !== "zz" && k !== "SAMO" && k !== "GUEST" && k !== "LONG" && k.indexOf("MIN") !== 0
     && k.indexOf("S_") !== 0 && !/_none$/.test(k);
 };
 
@@ -1179,6 +1179,8 @@ const schoolMaxAge = () => Math.max(...SCHOOL_DEPTS.map(s=>s.max));
 let MINISTERS = ["담임목사","부목사","전도사"];   /* 교역자 — 속·부서와 별도로 묶음 */
 const isMinister = m => MINISTERS.includes(m && m.position);
 const isSamo = m => (m && m.position) === "사모";   /* 사모 — 속회와 별도 항목 */
+/* 장기결석자 — 재적에서 빠지고 속·교회학교에도 들지 않습니다. 관리자·교역자만 봅니다 */
+const isLongAbsent = m => !!(m && m.longAbsent);
 /* 청년(직분이 '청년'이거나 메모에 청년부)은 나이와 상관없이 청년부 */
 const isYoungAdult = m => (m && m.position) === "청년" || /청년부/.test((m && m.memo) || "");
 
@@ -1231,13 +1233,19 @@ const bulkNewData = (m, field, value, label) => {
     const memo = [memo0.trim(), `${day} ${before} → ${value}`].filter(Boolean).join("\n");
     return {...m, position: value, memo};
   }
-  /* 속 편성 */
+  /* 장기결석자로 옮기기 */
+  if(value === "__LONG"){
+    const memo = [memo0.trim(), `${day} 장기결석으로 옮김`].filter(Boolean).join("\n");
+    return {...m, longAbsent: true, memo};
+  }
+  /* 속 편성 (장기결석이었다면 재적으로 돌아옵니다) */
+  const back = isLongAbsent(m) ? `${day} 장기결석에서 돌아옴` : "";
   const ageMode = !(SOK_MODE === "manual" || SOK_MODE === "area");
   /* 앞서 적어 둔 속 배정 줄은 지웁니다 — 옛 표기가 먼저 읽히지 않도록 */
   const kept = memo0.split("\n").filter(l => !/^\s*\d{4}-\d{2}-\d{2}\s*속 배정 →/.test(l)).join("\n").trim();
   const mark = ageMode ? (String(value).slice(1) + String(value).slice(0,1) + "선교회") : label;
-  const memo = [kept, `${day} 속 배정 → ${mark}`].filter(Boolean).join("\n");
-  return ageMode ? {...m, memo} : {...m, sok: value, memo};
+  const memo = [kept, back, `${day} 속 배정 → ${mark}`].filter(Boolean).join("\n");
+  return ageMode ? {...m, longAbsent: false, memo} : {...m, longAbsent: false, sok: value, memo};
 };
 
 /* 설정된 속 개수에 맞춘 키 목록: 남1..남n, 여1..여m */
@@ -1307,6 +1315,7 @@ const sokLabel = s => {
 /* 현재 나이로 교회학교 부서 찾기 */
 /* 한 사람이 속한 편성 구분: 남1~3, 여1~7, 교회학교 부서, 그 외 */
 const scopeKeyOf = m => {
+  if(isLongAbsent(m)) return "LONG";
   if(isMinister(m)) return "MIN";
   if(isSamo(m)) return "SAMO";
   const s = sokOf(m);
@@ -1379,6 +1388,7 @@ const sokSideOf = (key) => {
 };
 
 const inScope = (m, k) => {
+  if(isLongAbsent(m)) return k === PASTOR;                /* 장기결석자는 교역자만 */
   if(k === PASTOR || k === ELDER) return true;        /* 성도·교회학교 전체 */
   const sk = scopeKeyOf(m);
   if(k === ATT_ONLY)  return sk.indexOf("S_") !== 0;                  /* 교역자·어른 전부, 교회학교 제외 */
@@ -1390,7 +1400,7 @@ const inScope = (m, k) => {
 };
 
 const schoolDeptOf = m => {
-  if(isMinister(m) || isSamo(m)) return null;
+  if(isMinister(m) || isSamo(m) || isLongAbsent(m)) return null;
   if(isYoungAdult(m)) return SCHOOL_DEPTS.find(s => s.key === "young") || null;
   const a = koAge(m.birth);
   if(a === null) return null;
@@ -1967,10 +1977,16 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   const canCheckAtt = isAdmin || rangeEnts.some(isW);
   const isSchoolTeacher = listEnts.some(e => { const k = entKey(e); return k === "S_ALL" || k.indexOf("S_") === 0; });
 
+  /* 장기결석자는 관리자·교역자에게만 보입니다 */
+  const canSeeAbsent = isAdmin || isPastorNow;
+  const seeable = canSeeAbsent ? members : members.filter(m => !isLongAbsent(m));
+  /* 재적 교인 — 교인 수·출석·생일에 쓰는 명단 (장기결석자 제외) */
+  const activeMembers = members.filter(m => !isLongAbsent(m));
+
   /* 속장은 자기 담당만, 전체 담당이면 모두 */
-  const myMembers = fullView ? members : members.filter(canViewM);
-  const attMembers = fullView ? members
-    : members.filter(m => rangeEnts.some(e => inScope(m, entKey(e))));
+  const myMembers = fullView ? seeable : seeable.filter(canViewM);
+  const attMembers = fullView ? activeMembers
+    : activeMembers.filter(m => rangeEnts.some(e => inScope(m, entKey(e))));
 
   /* 이 사람의 정보를 고칠 수 있는가 — 교사는 자기 담당 학생만 */
   const canEditMember = (m) => {
@@ -1979,14 +1995,14 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   };
   /* 속장·교사가 담당 범위 밖이라도 볼 수 있는 사람: 담당 교인과 가족으로 이어진 분 (한 다리까지) */
   const viewMembers = useMemo(()=>{
-    if(!isLeader) return members;
+    if(!isLeader) return seeable;
     const mine = myMembers;
     const mineIds = new Set(mine.map(x=>x.id));
     const nm = s => (s||"").trim();
     const famNames = new Set();
     mine.forEach(x => (x.family||[]).forEach(f => { if(nm(f.name)) famNames.add(nm(f.name)); }));
     const myNames = new Set(mine.map(x=>nm(x.name)).filter(Boolean));
-    const extra = members.filter(x =>
+    const extra = seeable.filter(x =>
       !mineIds.has(x.id) && (
         famNames.has(nm(x.name)) ||                                   /* 담당 교인의 가족란에 있는 분 */
         (x.family||[]).some(f => myNames.has(nm(f.name)))             /* 그분의 가족란에 담당 교인이 있는 경우 */
@@ -2399,7 +2415,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
               : ` · ${myMembers.length}명의 신상을 보고 출석을 체크하실 수 있습니다.`}
             {isSchoolTeacher && " 담당 부서 학생의 정보는 직접 수정하실 수 있습니다."}</span>
         </div>}
-        {view==="home" && <Home churchName={churchName} homePhoto={homePhoto} members={attOnly ? [] : myMembers} att={att} go={go} openMember={openMember}
+        {view==="home" && <Home churchName={churchName} homePhoto={homePhoto} members={attOnly ? [] : myMembers.filter(m => !isLongAbsent(m))} att={att} go={go} openMember={openMember}
           showNew={isAdmin || isPastorNow} canSeeVisits={canSeeVisits} canSeeSecret={canSeeSecret} meId={profile.id}
           listOK={!noScope && !attOnly} attOK={!noScope} canAddMember={canEdit}/>}
         {view==="members" && attOnly &&
@@ -2421,7 +2437,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             ? <div className="panel empty">새 교인 등록은 관리자와 수정 권한이 있는 분만 할 수 있습니다.
                 <div style={{marginTop:10}}><button className="btn sm" onClick={()=>setMemView({mode:"list"})}>돌아가기</button></div>
               </div> :
-          memView.mode==="form" ? <MemberForm init={memView.id ? byId(memView.id) : null}
+          memView.mode==="form" ? <MemberForm init={memView.id ? byId(memView.id) : null} canAbsent={canEdit}
               onCancel={()=>setMemView(memView.id ? {mode:"detail", id:memView.id} : {mode:"list"})}
               onSave={(m)=>{ saveMemberRow(m); setMemView({mode:"detail", id:m.id}); }}/> :
           <MemberDetail m={viewMembers.find(x=>x.id===memView.id)} att={att} specials={specials}
@@ -2450,13 +2466,13 @@ function App({sb, profile, logout, churchId, leaveChurch}){
           canOrder={canOrder} saveOrder={saveOrder} orderVer={memberOrder}/>}
         {view==="visit" && (!canSeeVisits
           ? <p className="empty">심방 기록은 목회자와 관리자만 볼 수 있습니다.</p>
-          : <Visits members={members} update={updateMember} openMember={openMember} canEdit={canEdit}
+          : <Visits members={seeable} update={updateMember} openMember={openMember} canEdit={canEdit}
               meName={profile.name || profile.email} meId={profile.id}/>)}
-        {view==="cal" && <Calendar members={(noScope || attOnly) ? [] : myMembers} events={events} saveEvents={saveEvents}
+        {view==="cal" && <Calendar members={(noScope || attOnly) ? [] : myMembers.filter(m => !isLongAbsent(m))} events={events} saveEvents={saveEvents}
           canEdit={canEdit} openMember={openMember}
           openable={!noScope && !attOnly}/>}
         {view==="pray" &&
-          <Prayers members={members} update={updateMember} openMember={openMember}
+          <Prayers members={seeable} update={updateMember} openMember={openMember}
             canEdit={canEdit && !noScope} seeSecret={canSeeSecret}
             openable={!noScope && !attOnly}
             meName={profile.name || profile.email} meId={profile.id}/>}
@@ -2961,7 +2977,7 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
   const bulkField = book==="sok" ? "sok" : "position";
   const bulkOpts  = bulkField==="position"
     ? POSITIONS.map(p=>({v:p, l:p}))
-    : sokKeys().map(k=>({v:k, l:sokKeyLabel(k)}));
+    : [...sokKeys().map(k=>({v:k, l:sokKeyLabel(k)})), {v:"__LONG", l:"장기결석자 (재적 제외)"}];
   const bulkLabel = (bulkOpts.find(o=>o.v===bulkVal)||{}).l || "";
   const shown = list.filter(m => m && m.id != null);
   const toggleOne = id => setSel(s => s.includes(id) ? s.filter(x=>x!==id) : [...s, id]);
@@ -2971,14 +2987,16 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
     if(!bulkVal || sel.length===0) return;
     const picked = shown.filter(m=>sel.includes(m.id));
     /* 속 편성에서 빠지는 분(교역자·사모·청년)은 제외합니다 */
-    const skip = bulkField==="sok" ? picked.filter(m=>isMinister(m)||isSamo(m)||isYoungAdult(m)) : [];
+    const skip = (bulkField==="sok" && bulkVal!=="__LONG") ? picked.filter(m=>isMinister(m)||isSamo(m)||isYoungAdult(m)) : [];
     const targets = picked.filter(m=>!skip.includes(m));
     if(targets.length===0){ alert("고르신 분들은 속 편성 대상이 아닙니다. (교역자·사모·청년)"); return; }
     const msg = bulkField==="position"
       ? `${targets.length}명을 ${bulkVal}로 바꿉니다.`
-      : `${targets.length}명을 ${bulkLabel}으로 옮깁니다.`;
+      : bulkVal==="__LONG"
+        ? `${targets.length}명을 장기결석자로 옮깁니다.\n\n재적 교인 수와 출석 명단에서 빠지고, 관리자와 교역자만 보게 됩니다.`
+        : `${targets.length}명을 ${bulkLabel}으로 옮깁니다.`;
     const extra = skip.length ? `\n\n교역자·사모·청년 ${skip.length}명은 속 편성에서 빠지므로 그대로 둡니다.` : "";
-    const warn = (bulkField==="sok" && !(SOK_MODE==="manual" || SOK_MODE==="area"))
+    const warn = (bulkField==="sok" && bulkVal!=="__LONG" && !(SOK_MODE==="manual" || SOK_MODE==="area"))
       ? "\n\n※ 이 교회는 나이로 자동 배정하는 방식입니다. 속을 직접 정하면 그분들은 자동 배정에서 빠져 이 속으로 고정됩니다." : "";
     if(!confirm(msg + extra + warn + "\n\n바뀐 내용은 각자 메모에 한 줄 남습니다.")) return;
     setBusy(true);
@@ -2996,15 +3014,22 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
 
   const groups = useMemo(()=>{
     const map = {};
-    list.forEach(m=>{ const p = m.position || "성도"; (map[p]=map[p]||[]).push(m); });
+    const absent = [];
+    list.forEach(m=>{ if(isLongAbsent(m)){ absent.push(m); return; } const p = m.position || "성도"; (map[p]=map[p]||[]).push(m); });
     const known = POSITIONS.filter(p=>map[p]);
     const extra = Object.keys(map).filter(p=>!POSITIONS.includes(p)).sort((a,b)=>a.localeCompare(b,"ko"));
-    return [...known, ...extra].map(p=>({pos:p, items:map[p]}));
+    const out = [...known, ...extra].map(p=>({pos:p, items:map[p]}));
+    if(absent.length) out.push({pos:"장기결석자", items:absent, absent:true});   /* 재적 밖 — 맨 아래 */
+    return out;
   }, [list]);
 
   const sokGroups = useMemo(()=>{
     const map = {};
     list.forEach(m=>{
+      if(isLongAbsent(m)){                                 /* 장기결석자는 속에서 빠져 따로 */
+        if(!map["LONG"]) map["LONG"] = {s:null, items:[]};
+        map["LONG"].items.push(m); return;
+      }
       if(isMinister(m)){                                   /* 교역자는 따로 묶음 */
         if(!map["MIN"]) map["MIN"] = {s:null, items:[]};
         map["MIN"].items.push(m); return;
@@ -3020,10 +3045,10 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
       if(!map[key]) map[key] = {s:s, items:[]};
       map[key].items.push(m);
     });
-    const order = ["MIN","SAMO",...sokKeys(),"zz"];   /* 설정된 속 순서대로 */
+    const order = ["MIN","SAMO",...sokKeys(),"zz","LONG"];   /* 설정된 속 순서대로, 장기결석자는 맨 끝 */
     return order.filter(k=>map[k]).map(k=>({
       key:k,
-      label: k==="MIN" ? "교역자" : k==="SAMO" ? "사모" : k==="zz" ? "속 미지정" : sokLabel(map[k].s),
+      label: k==="MIN" ? "교역자" : k==="SAMO" ? "사모" : k==="zz" ? "속 미지정" : k==="LONG" ? "장기결석자 (재적 제외)" : sokLabel(map[k].s),
       items: map[k].items
     }));
   }, [list]);
@@ -3046,7 +3071,8 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
     <div>
       <div className="panel">
         <div className="row" style={{justifyContent:"space-between"}}>
-          <h2 style={{margin:0}}>교인 <span className="muted small">{members.length}명</span></h2>
+          <h2 style={{margin:0}}>교인 <span className="muted small">{members.filter(m=>!isLongAbsent(m)).length}명
+            {members.some(isLongAbsent) && ` · 장기결석 ${members.filter(isLongAbsent).length}명`}</span></h2>
           {canEdit && <button className="btn gold" onClick={()=>setMemView({mode:"form"})}>+ 새 교인 등록</button>}
         </div>
         <div className="svc-tabs" style={{marginTop:14, marginBottom:0}}>
@@ -3163,8 +3189,14 @@ function MemberList({members: members0, setMemView, canEdit, schoolClasses, save
 }
 
 /* ───────── 교인 등록/수정 ───────── */
-function MemberForm({init, onSave, onCancel}){
-  const [m, setM] = useState(init ? JSON.parse(JSON.stringify(init)) : emptyMember());
+function MemberForm({init, onSave, onCancel, canAbsent = false}){
+  /* 자료가 어긋나도 멈추지 않게 — 가족·봉사 칸이 없는 교인도 열립니다 */
+  const [m, setM] = useState(() => {
+    const o = init ? JSON.parse(JSON.stringify(init)) : emptyMember();
+    ["family","depts","visits","prayers"].forEach(k => { if(!Array.isArray(o[k])) o[k] = []; });
+    ["name","position","gender","birth","phone","address","memo"].forEach(k => { if(o[k] == null) o[k] = ""; else if(typeof o[k] !== "string") o[k] = String(o[k]); });
+    return o;
+  });
   const set = (k,v)=>setM(o=>({...o,[k]:v}));
   const setArr = (k, i, f, v)=>setM(o=>{ const a=[...o[k]]; a[i]={...a[i],[f]:v}; return {...o,[k]:a}; });
   const addRow = (k, row)=>setM(o=>({...o,[k]:[...o[k], row]}));
@@ -3219,6 +3251,16 @@ function MemberForm({init, onSave, onCancel}){
               <span className="muted small">비워 두면 주소를 보고 자동으로 배정됩니다.</span>}
           </div>}
       </div>
+      {canAbsent &&
+        <label className="row small" style={{gap:8, alignItems:"center", margin:"4px 0 10px"}}>
+          <input type="checkbox" checked={!!m.longAbsent} onChange={e=>{
+            const on = e.target.checked;
+            const line = `${todayStr()} ${on ? "장기결석으로 옮김" : "장기결석에서 돌아옴"}`;
+            setM(o=>({...o, longAbsent:on, memo:[String(o.memo||"").trim(), line].filter(Boolean).join("\n")}));
+          }}/>
+          <b>장기결석자</b>
+          <span className="muted">— 재적 교인 수·출석 명단·생일에서 빠지고, 속에서 나와 "장기결석자"로 모입니다. 관리자와 교역자만 봅니다.</span>
+        </label>}
       <div className="field"><label>주소</label>
         <input value={m.address} onChange={e=>set("address",e.target.value)} placeholder="시/구/동 상세주소"/></div>
       <div className="field"><label>메모</label>
@@ -3336,7 +3378,8 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
             <tr><th style={{width:90}}>생년월일</th><td>{m.birth ? `${m.birth} (${age}세)` : <span className="muted">미입력</span>}</td></tr>
             <tr><th>속회</th><td>{
               /* 교역자·사모·청년은 속회 편성 대상이 아니라 안내를 띄우지 않습니다 */
-              sokOf(m) ? sokLabel(sokOf(m))
+              isLongAbsent(m) ? <span className="chip secret">장기결석자 · 재적 제외</span>
+              : sokOf(m) ? sokLabel(sokOf(m))
               : (isMinister(m) || isSamo(m)) ? <span className="muted">해당 없음</span>
               : isYoungAdult(m) ? <span className="muted">청년부</span>
               : !canEdit ? <span className="muted">미지정</span>
