@@ -926,6 +926,16 @@ const calcAge = birth => {
   if (t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) a--;
   return a;
 };
+/* 서버가 저장하지 못하는 보이지 않는 글자(빈 글자 등)를 걸러 냅니다.
+   한글 문서·PDF에서 옮긴 글에 섞여 들어오면 "unsupported Unicode escape sequence" 오류로 저장이 멈춥니다. */
+const cleanText = x => {
+  if(typeof x === "string")
+    return x.replace(/\u0000/g, " ").replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFE\uFFFF]/g, "");
+  if(Array.isArray(x)) return x.map(cleanText);
+  if(x && typeof x === "object"){ const o = {}; Object.keys(x).forEach(k => { o[k] = cleanText(x[k]); }); return o; }
+  return x;
+};
+
 const fmtDT = v => {
   if (!v) return "";
   const [d, t] = v.split("T");
@@ -2031,7 +2041,8 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   useEffect(()=>{ if(churchId) loadAll(); }, [loadAll, churchId]);
 
   /* ── 서버 쓰기 ── */
-  const saveMemberRow = async (m) => {
+  const saveMemberRow = async (m0) => {
+    const m = cleanText(m0);
     setMembers(ms => ms.some(x=>x.id===m.id) ? ms.map(x=>x.id===m.id?m:x) : [...ms, m]);
     const {error} = await sb.from("members")
       .upsert({church_id:churchId, id:m.id, data:m});
@@ -2166,7 +2177,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     }
     const curById = {};
     if(mode === "merge") members.forEach(x=>{ curById[x.id] = x; });
-    const rows = (d.members||[]).map(im=>{
+    const rows = (d.members||[]).map(cleanText).map(im=>{
       const data = (mode === "merge" && im.id && curById[im.id]) ? mergeMember(curById[im.id], im) : im;
       return {church_id:churchId, id:im.id||uid(), data};
     });
