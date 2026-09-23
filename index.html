@@ -3529,16 +3529,20 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
       <div className={"panel folder-panel f-dept" + ((tab==="dept" || (tab!=="fam" && tab!=="dept" && tab!=="att" && tab!=="visit" && tab!=="pray" && "dept"==="fam")) ? " on" : "")}>
         <h2>봉사 부서</h2>
         {(m.depts||[]).length===0 ? <p className="empty">등록된 봉사 이력이 없습니다.</p> : (
-          <div>
-            {curDepts.length>0 && <div style={{marginBottom:8}}>
-              {curDepts.map(d=><span key={d.id} className="chip now" style={{marginRight:6}}>
-                {d.name}{d.from && ` (${d.from}~현재)`}</span>)}
-            </div>}
-            {pastDepts.length>0 && <div>
-              {pastDepts.map(d=><span key={d.id} className="chip past" style={{marginRight:6}}>
-                {d.name}{(d.from||d.to) && ` (${d.from||"?"}~${d.to||"?"})`}</span>)}
-            </div>}
-          </div>)}
+          /* 가족 표와 같은 모양 — 부서 · 기간 · 상태 */
+          <div className="tbl-wrap"><table className="list-tbl">
+            <thead><tr><th>부서</th><th>기간</th><th>상태</th></tr></thead>
+            <tbody>{[...curDepts, ...pastDepts].map(d=>(
+              <tr key={d.id}>
+                <td className="c-name">{d.name}</td>
+                <td className="c-date">{(d.from || d.to)
+                  ? `${d.from || "?"} ~ ${d.current ? "현재" : (d.to || "?")}`
+                  : <span className="muted">기간 없음</span>}</td>
+                <td className="c-state">{d.current
+                  ? <span className="chip now">섬기는 중</span>
+                  : <span className="chip past">지난 봉사</span>}</td>
+              </tr>))}
+            </tbody></table></div>)}
       </div>
 
       <div className={"panel folder-panel f-att" + ((tab==="att" || (tab!=="fam" && tab!=="dept" && tab!=="att" && tab!=="visit" && tab!=="pray" && "att"==="fam")) ? " on" : "")}>
