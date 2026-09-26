@@ -770,6 +770,10 @@
     justify-content:center;background:#EEF2F8;color:#8a94a3;font-weight:700}
   .bulkphoto-row .bp-txt{min-width:0;flex:1 1 auto;overflow:hidden}
   .bulkphoto-row .bp-txt b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+  .photo-job{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#F2D98A;
+    background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.25);border-radius:999px;
+    padding:3px 10px;white-space:nowrap}
+  @media (max-width:640px){ .photo-job{font-size:11px;padding:2px 8px} }
   .order-save-bar{position:sticky;bottom:0;z-index:5;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
     background:rgba(255,255,255,.96);border:1px solid var(--line, #dde3ea);border-radius:12px;padding:10px 12px;
     box-shadow:0 -4px 14px rgba(0,0,0,.08);margin-top:6px}
@@ -2170,8 +2174,9 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     return data;
   };
 
-  /* 예전에 넣어 둔 큰 사진은 관리자가 들어올 때 한 번 저절로 줄입니다 */
+  /* 예전에 넣어 둔 큰 사진은 관리자가 들어올 때 저절로 줄입니다 (진행 상황을 위 띠에 보여 줍니다) */
   const shrunkRef = useRef(false);
+  const [photoJob, setPhotoJob] = useState("");
   useEffect(() => {
     if(!isAdmin || shrunkRef.current || !members.length) return;
     const big = members.filter(m => m && typeof m.photo === "string"
@@ -2179,14 +2184,26 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     if(!big.length) return;
     shrunkRef.current = true;
     (async () => {
-      const out = [];
-      for(const m of big){
+      const out = []; let before = 0, after = 0;
+      for(let i = 0; i < big.length; i++){
+        const m = big[i];
+        setPhotoJob(`사진 정리 중 ${i + 1}/${big.length}`);
         const p = await shrinkPhoto(m.photo);
-        if(p && p.length < m.photo.length) out.push({...m, photo:p});
+        if(p && p.length < m.photo.length){ before += photoKB(m.photo); after += photoKB(p); out.push({...m, photo:p}); }
+        if(i % 5 === 0) await new Promise(r => setTimeout(r, 0));   /* 화면이 멈추지 않게 */
       }
+      if(!out.length){ setPhotoJob(""); return; }
       try{
-        for(let i = 0; i < out.length; i += 40) await bulkSaveMembers(out.slice(i, i + 40));
-      }catch(_){ shrunkRef.current = false; }   /* 실패하면 다음에 다시 시도 */
+        for(let i = 0; i < out.length; i += 40){
+          setPhotoJob(`사진 저장 중 ${Math.min(i + 40, out.length)}/${out.length}`);
+          await bulkSaveMembers(out.slice(i, i + 40));
+        }
+        setPhotoJob(`사진 ${out.length}장 정리 완료 (${before}KB → ${after}KB)`);
+        setTimeout(() => setPhotoJob(""), 8000);
+      }catch(e){
+        shrunkRef.current = false;
+        setPhotoJob("사진 정리 실패 — " + errMsg(e));
+      }
     })();
   }, [isAdmin, members.length]);
 
@@ -2480,6 +2497,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             <button className="backup-btn refresh-btn" title="새로 불러오기"
               onClick={()=>window.location.reload()} aria-label="새로 불러오기">⟳</button>
             {canEdit && !isLeader && <button className="backup-btn" onClick={doExport}>백업</button>}
+            {photoJob && <span className="photo-job" title="예전에 넣은 큰 사진을 작게 줄이는 중입니다">{photoJob}</span>}
             {isAdmin && <button className="backup-btn" onClick={()=>fileRef.current.click()}>가져오기</button>}
             {leaveChurch && <button className="backup-btn" onClick={leaveChurch} title="다른 교회로">
               교회<span className="me-name"> 바꾸기</span></button>}
