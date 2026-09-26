@@ -4103,6 +4103,172 @@ function LineChart({rows, year, label, today}){
 }
 
 /* ───────── 교회 설정 (관리자 전용) ───────── */
+
+/* ═══ 엑셀(CSV) 명부 — 내려받기 · 올리기 ═══
+   엑셀에서 바로 열리도록 앞에 표식(BOM)을 붙여 저장합니다. */
+const CSV_COLS = ["이름","직분","성별","생년월일","연락처","주소","속","메모","가족"];
+
+const csvCell = v => {
+  const s = v == null ? "" : String(v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+const toCSV = rows => "\uFEFF" + rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+
+/* 따옴표와 줄바꿈까지 제대로 읽습니다 */
+const parseCSV = (text) => {
+  const s = String(text || "").replace(/^\uFEFF/, "");
+  const rows = []; let row = [], cell = "", q = false;
+  for(let i = 0; i < s.length; i++){
+    const c = s[i];
+    if(q){
+      if(c === '"'){ if(s[i+1] === '"'){ cell += '"'; i++; } else q = false; }
+      else cell += c;
+    } else if(c === '"') q = true;
+    else if(c === ","){ row.push(cell); cell = ""; }
+    else if(c === "\n"){ row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if(c !== "\r") cell += c;
+  }
+  if(cell !== "" || row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(x => String(x).trim() !== ""));
+};
+
+const saveFile = (name, text, type) => {
+  const blob = new Blob([text], {type: type || "text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+/* 가족: "아내:김영숙, 아들:이영욱(33)" 처럼 한 칸에 적습니다 */
+const famToText = m => (Array.isArray(m.family) ? m.family : [])
+  .filter(Boolean)
+  .map(f => `${f.relation || ""}:${f.name || ""}${f.age ? "(" + f.age + ")" : ""}`).join(", ");
+const textToFam = s => String(s || "").split(/[,;]/).map(x => x.trim()).filter(Boolean).map((x, i) => {
+  const p = x.split(":");
+  const rel = p.length > 1 ? p[0].trim() : "";
+  const rest = (p.length > 1 ? p.slice(1).join(":") : x).trim();
+  const g = rest.match(/^(.*?)\s*\((\d{1,3})\)\s*$/);
+  return {id:"f" + (i + 1), relation:rel, name:(g ? g[1] : rest).trim(), age:g ? g[2] : "", job:""};
+});
+
+/* 설정 화면 — 엑셀(CSV) 명부 */
+function ExcelSheet({members, bulkSave}){
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState("");
+  const fileRef = useRef(null);
+  const list = Array.isArray(members) ? members.filter(Boolean) : [];
+  const manual = SOK_MODE === "manual" || SOK_MODE === "area";
+
+  const template = () => saveFile("교인명부_서식.csv", toCSV([
+    CSV_COLS,
+    ["김영숙","권사","여","1956-02-15","010-0000-0000","서울시 ○○구 ○○로 12, 101동 202호",
+     manual ? (sokKeys()[0] ? sokKeyLabel(sokKeys()[0]) : "") : "", "메모는 자유롭게","남편:이태진, 아들:이영욱(33)"],
+  ]));
+
+  const exportAll = () => saveFile(`교인명부_${todayStr()}.csv`, toCSV([
+    CSV_COLS,
+    ...list.map(m => [m.name, m.position, m.gender, m.birth, m.phone, m.address,
+      m.sok ? sokKeyLabel(m.sok) : (sokOf(m) ? sokLabel(sokOf(m)) : ""), m.memo, famToText(m)]),
+  ]));
+
+  const read = (file) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const data = parseCSV(r.result);
+      if(!data.length){ alert("빈 파일입니다."); return; }
+      const head = data[0].map(x => String(x).replace(/\s/g, ""));
+      const at = name => head.indexOf(name);
+      if(at("이름") < 0){ alert("첫 줄에 칸 이름이 없습니다. '엑셀 서식 내려받기'로 받은 파일에 채워 주세요."); return; }
+      const get = (r2, n) => { const i = at(n); return i < 0 ? "" : String(r2[i] || "").trim(); };
+      const out = data.slice(1).map(r2 => {
+        const name = get(r2, "이름");
+        const birth = get(r2, "생년월일").replace(/[./]/g, "-");
+        const sokName = get(r2, "속");
+        const sokId = manual ? (sokKeys().find(k => sokKeyLabel(k) === sokName || k === sokName) || "") : "";
+        const old = list.find(m => m.name === name && (!birth || !m.birth || m.birth === birth));
+        return {name, birth, sokName, sokId, old,
+          position:get(r2, "직분"), gender:get(r2, "성별"), phone:get(r2, "연락처"),
+          address:get(r2, "주소"), memo:get(r2, "메모"), family:textToFam(get(r2, "가족"))};
+      });
+      setRows(out);
+    };
+    r.readAsText(file, "utf-8");
+  };
+
+  const good = rows ? rows.filter(r => r.name) : [];
+  const noName = rows ? rows.length - good.length : 0;
+  const upd = good.filter(r => r.old);
+  const noBirth = good.filter(r => !r.birth || !r.gender);
+  const noSok = manual ? good.filter(r => r.sokName && !r.sokId) : [];
+
+  const apply = async () => {
+    if(!good.length) return;
+    if(!confirm(`${good.length}명을 넣습니다.\n\n새로 등록: ${good.length - upd.length}명\n이미 있는 분 정보 고침: ${upd.length}명\n\n먼저 위 띠의 [백업]을 받아 두세요. 계속할까요?`)) return;
+    setBusy("저장 중…");
+    try{
+      const out = good.map(r => {
+        const base = r.old ? {...r.old} : {...emptyMember(), id:uid()};
+        const next = {...base, name:r.name, position:r.position || base.position || "",
+          gender:r.gender || base.gender || "", birth:r.birth || base.birth || "",
+          phone:r.phone || base.phone || "", address:r.address || base.address || "",
+          memo:r.memo || base.memo || ""};
+        if(r.sokId) next.sok = r.sokId;
+        if(r.family.length) next.family = r.family;
+        return next;
+      });
+      for(let i = 0; i < out.length; i += 40){
+        await bulkSave(out.slice(i, i + 40));
+        setBusy(`저장 중… ${Math.min(i + 40, out.length)} / ${out.length}명`);
+      }
+      alert(`${good.length}명을 넣었습니다.`);
+      setRows(null);
+    }catch(e){ /* 알림은 App 에서 */ }
+    finally{ setBusy(""); }
+  };
+
+  return (
+    <div className="panel">
+      <h2>엑셀로 명부 넣기</h2>
+      <p className="muted small" style={{marginTop:0}}>
+        서식을 내려받아 엑셀에서 채운 뒤 다시 올리면 교인이 한 번에 등록됩니다.
+        칸 이름은 <b>{CSV_COLS.join(" · ")}</b> 이고, <b>이름</b>만 꼭 있으면 됩니다.
+        이름과 생년월일이 같은 분이 이미 있으면 그분 정보를 고칩니다.</p>
+      <div className="row" style={{gap:8, flexWrap:"wrap"}}>
+        <button className="btn ghost" onClick={template} disabled={!!busy}>엑셀 서식 내려받기</button>
+        <button className="btn ghost" onClick={exportAll} disabled={!!busy || !list.length}>지금 명부 내려받기 ({list.length}명)</button>
+        <input ref={fileRef} type="file" accept=".csv,text/csv" style={{display:"none"}}
+          onChange={e=>{ if(e.target.files[0]) read(e.target.files[0]); e.target.value = ""; }}/>
+        <button className="btn" onClick={()=>fileRef.current && fileRef.current.click()} disabled={!!busy}>엑셀 파일 올리기</button>
+        {busy && <span className="muted small">{busy}</span>}
+      </div>
+
+      {rows && <div style={{marginTop:12}}>
+        <p className="small" style={{margin:"0 0 8px"}}>
+          넣을 사람 <b>{good.length}명</b> (새로 등록 {good.length - upd.length}명 · 정보 고침 {upd.length}명)
+          {noName ? ` · 이름이 없어 빼는 줄 ${noName}줄` : ""}
+          {noBirth.length ? ` · 성별이나 생년월일이 없어 속이 정해지지 않을 분 ${noBirth.length}명` : ""}
+          {noSok.length ? ` · 설정에 없는 속 이름 ${noSok.length}명` : ""}</p>
+        <div className="tbl-wrap"><table className="list-tbl">
+          <thead><tr><th>이름</th><th>직분·성별</th><th>생년월일</th><th>어떻게 들어가나</th></tr></thead>
+          <tbody>{good.slice(0, 50).map((r, i) => (
+            <tr key={i}>
+              <td className="c-name">{r.name}</td>
+              <td className="c-date">{[r.position, r.gender].filter(Boolean).join(" · ")}</td>
+              <td className="c-text">{r.birth || <span className="muted">없음</span>}</td>
+              <td className="c-state">{r.old ? <span className="chip pos">정보 고침</span> : <span className="chip now">새로 등록</span>}</td>
+            </tr>))}
+          </tbody></table></div>
+        {good.length > 50 && <p className="muted small">…앞의 50명만 보여 드립니다.</p>}
+        <div className="row" style={{gap:8, marginTop:10}}>
+          <button className="btn" onClick={apply} disabled={!!busy || !good.length}>{good.length}명 넣기</button>
+          <button className="btn ghost" onClick={()=>setRows(null)} disabled={!!busy}>취소</button>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
 /* ═══ 사진 한꺼번에 넣기 — 파일 이름을 교인 이름으로 해 두면 짝을 맞춰 넣습니다 ═══
    김영숙.jpg  ·  김영숙_1956.jpg (같은 이름이 여럿일 때 태어난 해로 구분) */
 function BulkPhotos({members, bulkSave}){
@@ -4347,6 +4513,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
         <button type="button" className="btn" disabled={photoBusy || !homePhotoReady} onClick={saveSettings}>{saving ? "저장 중…" : "설정 저장"}</button>
       </div>
 
+      {members && bulkSave && <ExcelSheet members={members} bulkSave={bulkSave}/>}
       {members && bulkSave && <BulkPhotos members={members} bulkSave={bulkSave}/>}
 
       <div className="panel">
@@ -4472,6 +4639,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
 /* ═══ 업데이트 소식 — 새 기능을 올릴 때 맨 위에 한 줄씩 더합니다 ═══
    who: "all" 모두 · "pastor" 관리자·교역자 · "admin" 관리자만  (쓸 수 없는 분에게는 보이지 않습니다) */
 const UPDATES = [
+  {date:"2026-09-26", who:"admin",  text:"엑셀로 명부 넣기 — 설정에서 서식을 내려받아 채운 뒤 올리면 교인이 한 번에 등록됩니다. 지금 명부를 엑셀로 내려받을 수도 있습니다."},
   {date:"2026-09-26", who:"admin",  text:"사진 한꺼번에 넣기 — 파일 이름을 교인 이름으로 해 두면 여러 장을 한 번에 넣습니다. 사진은 넣을 때 저절로 작게 줄여 저장합니다."},
   {date:"2026-09-22", who:"all",    text:"교인 기록을 신상카드와 색 폴더(가족·봉사·예배출석·심방·중보기도)로 바꿨습니다. 휴대폰에서 길게 내리지 않아도 됩니다."},
   {date:"2026-09-22", who:"pastor", text:"장기결석자 구분 — 재적에서 빼고 관리자·교역자만 보는 '장기결석자' 묶음으로 모읍니다."},
