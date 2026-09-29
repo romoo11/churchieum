@@ -2082,9 +2082,9 @@ function App({sb, profile, logout, churchId, leaveChurch}){
   const [specials, setSpecials] = useState([]);  /* 특별예배 [{key,label,from,to}] */
   const [joinCode, setJoinCode] = useState("");
   const [cfgVer, setCfgVer] = useState(0);       /* 설정이 바뀌면 화면 다시 그리기 */
-  const [helpUntil, setHelpUntil] = useState(null);   /* 교회가 열어 준 도움 마감 시각 */
+  const [helpUntil, setHelpUntil] = useState(null);   /* 교회가 열어 준 지원 마감 시각 */
   const [handover, setHandover] = useState(false);    /* 넘기기 전(관리자 첫 로그인 전) */
-  /* 교회이음 운영자로 들어온 경우 — 도움이 열려 있을 때만 고칠 수 있습니다 */
+  /* 교회이음 운영자로 들어온 경우 — 지원이 열려 있을 때만 고칠 수 있습니다 */
   const guestOwner = !!profile.guestOwner;
   const helpOpen = !!helpUntil || handover;
   const ownerRead = guestOwner && !helpOpen;          /* 살펴보기만 */
@@ -2295,7 +2295,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     setLogs(Array.isArray(data) ? data : []);
   };
 
-  /* 교회 관리자가 도움을 열고 닫습니다 */
+  /* 교회 관리자가 지원을 열고 닫습니다 */
   const setHelp = async (hours) => {
     const {data, error} = await sb.rpc("set_help", {c: churchId, hours});
     if(error){ fail(error); return; }
@@ -2597,12 +2597,12 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             {canEdit && !isLeader && <button className="backup-btn" onClick={doExport}>백업</button>}
             {guestOwner && <span className={"owner-flag" + (helpOpen ? " open" : "")}
               title={helpOpen
-                ? (helpUntil ? `교회이음 운영자 · 도움 허용 중 (${helpUntil.toLocaleString("ko-KR")} 까지)` : "교회이음 운영자 · 넘기기 전이라 고칠 수 있습니다")
+                ? (helpUntil ? `교회이음 운영자 · 지원 허용 중 (${helpUntil.toLocaleString("ko-KR")} 까지)` : "교회이음 운영자 · 넘기기 전이라 고칠 수 있습니다")
                 : "교회이음 운영자 · 살펴보기만 할 수 있습니다"}>
               <span className="of-long">교회이음 운영자 · {helpOpen
-                ? (helpUntil ? `도움 허용 중 (${helpUntil.toLocaleString("ko-KR", {month:"numeric", day:"numeric", hour:"numeric"})}까지)` : "넘기기 전 — 고칠 수 있음")
+                ? (helpUntil ? `지원 허용 중 (${helpUntil.toLocaleString("ko-KR", {month:"numeric", day:"numeric", hour:"numeric"})}까지)` : "넘기기 전 — 고칠 수 있음")
                 : "살펴보기만"}</span>
-              <span className="of-short">운영자 · {helpOpen ? "도움 중" : "보기만"}</span></span>}
+              <span className="of-short">운영자 · {helpOpen ? "지원 중" : "보기만"}</span></span>}
             {photoJob && <span className="photo-job" title="예전에 넣은 큰 사진을 작게 줄이는 중입니다">{photoJob}</span>}
             {isAdmin && <button className="backup-btn" onClick={()=>fileRef.current.click()}>가져오기</button>}
             {leaveChurch && <button className="backup-btn" onClick={leaveChurch} title="다른 교회로">
@@ -4230,14 +4230,14 @@ function LineChart({rows, year, label, today}){
 /* ───────── 교회 설정 (관리자 전용) ───────── */
 
 
-/* ═══ 교회이음 도움 허용 — 관리자가 기간을 정해 엽니다 ═══ */
+/* ═══ 교회이음 지원 허용 — 관리자가 기간을 정해 엽니다 ═══ */
 function HelpPanel({helpUntil, handover, setHelp, logs, loadLogs}){
   const [busy, setBusy] = useState(false);
   const open = !!helpUntil || handover;
   const go = async (h) => { setBusy(true); try{ await setHelp(h); } finally{ setBusy(false); } };
   return (
     <div className="panel">
-      <h2>교회이음 도움 허용</h2>
+      <h2>교회이음 지원 허용</h2>
       <p className="muted small" style={{marginTop:0}}>
         명단을 넣어 드리거나 설정을 도와드릴 때만 잠시 열어 주세요.
         열어 두신 동안에만 교회이음이 이 교회의 자료를 고칠 수 있고, 고친 일은 아래에 모두 기록됩니다.
@@ -4541,7 +4541,7 @@ function BulkPhotos({members, bulkSave}){
 }
 
 function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initialMessage, members, bulkSave, helpProps}){
-  const [cfgTab, setCfgTab] = useState("svc");   /* 열려 있는 설정 폴더 */
+  const [cfgTab, setCfgTab] = useState("photo");   /* 열려 있는 설정 폴더 */
   const [c, setC] = useState(currentChurchConfig());
   const [msg, setMsg] = useState(initialMessage || "");
   const [saveError, setSaveError] = useState("");
@@ -4647,14 +4647,14 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
       <fieldset className="church-settings-fields" disabled={saving || !homePhotoReady}>
       {(() => {
         const tabs = [
+          {k:"photo",  l:"사진"},
           {k:"svc",    l:"예배·직분"},
           {k:"sok",    l:"속회"},
           {k:"school", l:"교회학교"},
-          {k:"photo",  l:"사진"},
-          ...(members && bulkSave ? [{k:"data", l:"명부"}] : []),
-          ...(helpProps ? [{k:"help", l:"도움"}] : []),
+          ...(members && bulkSave ? [{k:"data", l:"명단"}] : []),
+          ...(helpProps ? [{k:"help", l:"지원"}] : []),
         ];
-        const cur = tabs.some(x=>x.k===cfgTab) ? cfgTab : "svc";
+        const cur = tabs.some(x=>x.k===cfgTab) ? cfgTab : "photo";
         return (
           <div className="folder-tabs no-print" role="tablist">
             {tabs.map(x => (
@@ -4836,8 +4836,8 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
    who: "all" 모두 · "pastor" 관리자·교역자 · "admin" 관리자만  (쓸 수 없는 분에게는 보이지 않습니다) */
 const UPDATES = [
   {date:"2026-09-29", who:"all",    text:"휴대폰에서 메뉴를 화면 아래에서 교회 이름 아래로 옮겼습니다. 글씨 단추라 잘 보이고, 휴대폰 아래 막대에 가리지 않습니다."},
-  {date:"2026-09-29", who:"admin",  text:"설정 화면을 색 폴더(예배·직분 · 속회 · 교회학교 · 사진 · 명부 · 도움)로 나눴습니다. 길게 내리지 않아도 됩니다."},
-  {date:"2026-09-28", who:"all",    text:"교회이음 도움 허용 — 교회가 설정에서 열어 준 기간에만 교회이음이 자료를 고칠 수 있습니다. 접속·수정 기록도 설정 화면에서 보실 수 있습니다."},
+  {date:"2026-09-29", who:"admin",  text:"설정 화면을 색 폴더(사진 · 예배·직분 · 속회 · 교회학교 · 명단 · 지원)로 나눴습니다. 길게 내리지 않아도 됩니다."},
+  {date:"2026-09-28", who:"all",    text:"교회이음 지원 허용 — 교회가 설정에서 열어 준 기간에만 교회이음이 자료를 고칠 수 있습니다. 접속·수정 기록도 설정 화면에서 보실 수 있습니다."},
   {date:"2026-09-26", who:"admin",  text:"엑셀로 명부 넣기 — 설정에서 서식을 내려받아 채운 뒤 올리면 교인이 한 번에 등록됩니다. 지금 명부를 엑셀로 내려받을 수도 있습니다."},
   {date:"2026-09-26", who:"admin",  text:"사진 한꺼번에 넣기 — 파일 이름을 교인 이름으로 해 두면 여러 장을 한 번에 넣습니다. 사진은 넣을 때 저절로 작게 줄여 저장합니다."},
   {date:"2026-09-22", who:"all",    text:"교인 기록을 신상카드와 색 폴더(가족·봉사·예배출석·심방·중보기도)로 바꿨습니다. 휴대폰에서 길게 내리지 않아도 됩니다."},
@@ -4853,10 +4853,19 @@ const UPDATES = [
   {date:"2026-09-16", who:"all",    text:"속마다·반마다 첫 칸은 금색 테두리 — 속장·리더 자리입니다."},
 ];
 
+const NEWS_SEEN_KEY = "churchNewsSeen";   /* 마지막으로 본 소식 날짜 */
+
 function GateNews({isAdmin, isPastor}){
   const [more, setMore] = useState(false);
   const mine = UPDATES.filter(u => u && (u.who === "all" || (u.who === "pastor" && (isAdmin || isPastor)) || (u.who === "admin" && isAdmin)));
   if(!mine.length) return null;
+  /* 가장 새로운 소식 날짜를 기억해 두고, 이미 본 날짜면 띄우지 않습니다 */
+  const latest = mine.reduce((a, u) => (u.date > a ? u.date : a), "");
+  /* 처음 그릴 때의 값을 붙잡아 둡니다 (화면이 다시 그려져도 사라지지 않게) */
+  const [seen] = useState(() => { try{ return localStorage.getItem(NEWS_SEEN_KEY) || ""; }catch(_){ return ""; } });
+  useEffect(() => { try{ if(latest) localStorage.setItem(NEWS_SEEN_KEY, latest); }catch(_){} }, [latest]);
+  if(!latest || seen >= latest) return null;        /* 두 번째 접속부터는 보이지 않습니다 */
+
   const shown = more ? mine : mine.slice(0, 3);
   const days = [];
   shown.forEach(u => { const d = days.find(x => x.date === u.date); if(d) d.items.push(u.text); else days.push({date:u.date, items:[u.text]}); });
