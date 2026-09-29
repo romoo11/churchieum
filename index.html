@@ -319,6 +319,7 @@
   nav::-webkit-scrollbar{display:none}
   nav button{white-space:nowrap}
   .top-right{display:flex;gap:4px;align-items:center;white-space:nowrap}
+  header.top nav .nv-short{display:none}
   /* 화면이 좁아질수록 조금씩 더 줄여 한 줄을 지킨다 */
   nav button{background:none;border:1px solid transparent;color:#CFDDD6;padding:7px 10px;
     border-radius:11px;font-weight:500;font-size:14.5px;
@@ -554,22 +555,39 @@
     background:linear-gradient(180deg,#5A7FB4 0%,#2E4E82 42%,#22355C 100%);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.42), 0 2px 5px rgba(22,34,61,.28)}
 
+  /* 올린 곳(Netlify)이 화면 아래에 붙이는 배지가 메뉴를 가리지 않게 */
+  a[href*="netlify.com"], #netlify-badge, [class*="netlify-badge"]{display:none !important}
+
   /* ── 아래쪽 탭바 (휴대폰) ── */
   .tabbar{display:none}
   @media (max-width:640px){
-    .top-in{padding:7px 8px;gap:6px;flex-wrap:nowrap}
-    /* 위 띠에는 교회 이름과 백업·가져오기·교회 바꾸기·로그아웃만 */
-    header.top nav{display:none}
+    /* 휴대폰: 아래 탭바 대신 교회 이름 아래로 글씨 단추를 한 줄씩 가득 채웁니다
+       (아래에 두면 휴대폰의 스와이프 막대와 겹쳐 가려지는 기기가 있습니다) */
+    .top-in{padding:6px 8px 7px;gap:5px;flex-wrap:wrap}
     .top-in > .back-btn{display:none}
-    .brand{font-size:14.5px;gap:5px;flex:0 0 auto}
+    .top-in > .brand{flex:1 1 100%;min-width:0}
+    .brand{font-size:14.5px;gap:5px}
     .brand svg{width:20px;height:20px}
-    .brand button{max-width:27vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .top-right{flex:1 1 auto;justify-content:flex-end;overflow-x:auto;
-      scrollbar-width:none;-webkit-overflow-scrolling:touch}
-    .top-right::-webkit-scrollbar{display:none}
-    .backup-btn{padding:5px 7px;font-size:11px;flex:0 0 auto;border-radius:9px}
+    .brand button{max-width:62vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    /* 좁은 화면에서는 메뉴 이름을 짧게 (중보기도 → 중보) */
+    header.top nav .nv-long{display:none}
+    header.top nav .nv-short{display:inline}
+    /* 메뉴 줄 — 홈·교인·출석·달력·심방·중보·사용자·설정 */
+    header.top nav{display:flex;flex:1 1 100%;gap:3px;order:2;flex-wrap:wrap}
+    header.top nav button{flex:1 1 0;min-width:0;padding:7px 1px;font-size:12.5px;letter-spacing:-.4px;
+      border-radius:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  }
+  @media (max-width:400px){
+    header.top nav{gap:2px}
+    header.top nav button{font-size:11.5px;letter-spacing:-.7px;padding:7px 0}
+    /* 백업·가져오기·교회 바꾸기·로그아웃 줄 */
+    .top-in > .top-right{flex:1 1 100%;margin-left:0}
+    .top-right{order:3;display:flex;gap:3px;justify-content:stretch;overflow:visible}
+    .top-right > *{flex:1 1 0;min-width:0;justify-content:center}
+    .backup-btn{padding:6px 2px;font-size:11.5px;border-radius:9px;text-align:center}
+    .me-name{display:none}
 
-    .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;
+    .tabbar{display:none !important;position:fixed;left:0;right:0;bottom:0;z-index:30;
       background:var(--pine-deep);
       box-shadow:0 -2px 12px rgba(20,40,32,.3);
       padding:4px 2px calc(4px + env(safe-area-inset-bottom));
@@ -588,9 +606,9 @@
       background:linear-gradient(180deg,#EBD9A4 0%,#D3B159 44%,#B8912F 100%);
       box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 2px 4px rgba(0,0,0,.22)}
     .tab.off{visibility:hidden;pointer-events:none}
-    /* 탭바에 가리지 않도록 본문 아래 여백 */
-    .wrap{padding-bottom:78px}
-    .app-copy{padding-bottom:86px}
+    /* 아래 탭바를 쓰지 않으므로 아래 여백은 조금만 */
+    .wrap{padding-bottom:20px}
+    .app-copy{padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
     /* 홈 — 이번 달 생일: 날짜·이름·직분·연락처를 한 줄에 */
     .bday-panel{padding:14px 10px}
     .bday-tbl{font-size:13px}
@@ -2568,7 +2586,9 @@ function App({sb, profile, logout, churchId, leaveChurch}){
             title="이전 화면으로" aria-hidden={histLen===0} tabIndex={histLen>0?0:-1}>‹ 뒤로</button>
           <nav>
             {navItems.map(([k,l])=>(
-              <button key={k} className={view===k?"on":""} onClick={()=>go(k)}>{l}</button>
+              <button key={k} className={view===k?"on":""} onClick={()=>go(k)}>
+                <span className="nv-long">{l}</span>
+                <span className="nv-short">{TAB_SHORT[l] || l}</span></button>
             ))}
           </nav>
           <div className="top-right">
@@ -4815,6 +4835,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
 /* ═══ 업데이트 소식 — 새 기능을 올릴 때 맨 위에 한 줄씩 더합니다 ═══
    who: "all" 모두 · "pastor" 관리자·교역자 · "admin" 관리자만  (쓸 수 없는 분에게는 보이지 않습니다) */
 const UPDATES = [
+  {date:"2026-09-29", who:"all",    text:"휴대폰에서 메뉴를 화면 아래에서 교회 이름 아래로 옮겼습니다. 글씨 단추라 잘 보이고, 휴대폰 아래 막대에 가리지 않습니다."},
   {date:"2026-09-29", who:"admin",  text:"설정 화면을 색 폴더(예배·직분 · 속회 · 교회학교 · 사진 · 명부 · 도움)로 나눴습니다. 길게 내리지 않아도 됩니다."},
   {date:"2026-09-28", who:"all",    text:"교회이음 도움 허용 — 교회가 설정에서 열어 준 기간에만 교회이음이 자료를 고칠 수 있습니다. 접속·수정 기록도 설정 화면에서 보실 수 있습니다."},
   {date:"2026-09-26", who:"admin",  text:"엑셀로 명부 넣기 — 설정에서 서식을 내려받아 채운 뒤 올리면 교인이 한 번에 등록됩니다. 지금 명부를 엑셀로 내려받을 수도 있습니다."},
