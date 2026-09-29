@@ -691,17 +691,20 @@
   @media (max-width:640px){
     .list-tbl thead{display:none}
     .list-tbl, .list-tbl tbody{display:block;width:100%}
-    .list-tbl tr{display:grid;grid-template-columns:auto 1fr auto;gap:5px 8px;align-items:center;
+    .list-tbl tr{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:4px 8px;align-items:center;
       border:1px solid var(--line, #dde3ea);border-radius:12px;background:#fff;
       padding:10px 12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(34,53,92,.06)}
     .list-tbl td{display:block;border:0;padding:0;white-space:normal !important;word-break:break-word}
-    .list-tbl td.c-name{grid-column:1;grid-row:1}
-    .list-tbl td.c-date{grid-column:2;grid-row:1;font-size:12.5px;color:#6b7682;white-space:nowrap !important}
-    .list-tbl td.c-state{grid-column:3;grid-row:1;justify-self:end;white-space:nowrap !important}
-    .list-tbl td.c-text{grid-column:1 / -1;grid-row:2;line-height:1.6}
-    .list-tbl td.c-act{grid-column:1 / -1;grid-row:3;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    /* 첫 줄: 이름 · 상태 / 둘째 줄: 날짜와 적은 사람 / 셋째 줄: 내용 / 넷째 줄: 단추 */
+    .list-tbl td.c-name{grid-column:1;grid-row:1;min-width:0}
+    .list-tbl td.c-state{grid-column:2;grid-row:1;justify-self:end;white-space:nowrap !important}
+    .list-tbl td.c-date{grid-column:1 / -1;grid-row:2;font-size:12.5px;color:#6b7682;
+      white-space:normal !important;line-height:1.45}
+    .list-tbl td.c-text{grid-column:1 / -1;grid-row:3;line-height:1.6}
+    .list-tbl td.c-act{grid-column:1 / -1;grid-row:4;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
     .list-tbl td.c-act:empty{display:none}
     .list-tbl td.c-date .muted{display:inline;margin-left:4px}
+    .list-tbl td.c-date > .muted.small{font-size:12.5px}
   }
   /* 고르는 중에는 카드를 한 줄에 하나씩 — 체크 칸이 들어가 칸이 좁아지지 않게 */
   .mem-list:has(.bulk-row){grid-template-columns:1fr}
