@@ -3725,7 +3725,8 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
 
       <div className={"panel folder-panel f-att" + ((tab==="att" || (tab!=="fam" && tab!=="dept" && tab!=="att" && tab!=="visit" && tab!=="pray" && "att"==="fam")) ? " on" : "")}>
         <h2>예배 출석 현황</h2>
-        <div className="tbl-wrap"><table>
+        <MemberMonthChart att={att} memberId={m.id}/>
+        <div className="tbl-wrap" style={{marginTop:12}}><table>
           <thead><tr><th>예배</th><th>올해 출석</th><th>누적</th><th>최근 출석일</th></tr></thead>
           <tbody>{attStat.map(s=>(
             <tr key={s.key}><td>{s.special && "✦ "}{s.label}</td>
@@ -4232,6 +4233,76 @@ function LineChart({rows, year, label, today}){
 
 /* ───────── 교회 설정 (관리자 전용) ───────── */
 
+
+
+/* ═══ 교인 한 사람의 달별 출석 횟수 그래프 ═══
+   자료가 어긋나도 멈추지 않도록 모든 값을 확인하며 셉니다. */
+function MemberMonthChart({att, memberId, months = 12}){
+  const data = (() => {
+    const now = new Date();
+    const keys = [];
+    for(let i = months - 1; i >= 0; i--){
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      keys.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+    }
+    const cnt = {}; keys.forEach(k => { cnt[k] = 0; });
+    const a = att && typeof att === "object" ? att : {};
+    Object.keys(a).forEach(day => {
+      if(typeof day !== "string" || day.length < 7) return;
+      const mo = day.slice(0, 7);
+      if(!(mo in cnt)) return;
+      const svcs = a[day] && typeof a[day] === "object" ? a[day] : {};
+      Object.keys(svcs).forEach(k => {
+        const ids = svcs[k];
+        if(Array.isArray(ids) && ids.indexOf(memberId) >= 0) cnt[mo] += 1;
+      });
+    });
+    return keys.map(k => ({mo:k, n:cnt[k]}));
+  })();
+
+  const total = data.reduce((s, d) => s + d.n, 0);
+  if(!total) return <div className="att-chart"><p className="empty" style={{margin:0}}>최근 {months}달 출석 기록이 아직 없습니다.</p></div>;
+
+  const W = 560, H = 210, L = 30, R = 10, T = 16, B = 34;
+  const iw = W - L - R, ih = H - T - B;
+  const hi = Math.max(...data.map(d => d.n));
+  const top = Math.max(hi, 1);
+  const bw = iw / data.length;
+  const avg = Math.round((total / data.length) * 10) / 10;
+  const y = n => T + ih - (n / top) * ih;
+  const label = k => { const p = String(k).split("-"); return Number(p[1]) + "월"; };
+
+  return (
+    <div className="att-chart">
+      <div className="chart-head">
+        <b>달별 출석 횟수</b>
+        <span className="muted small">최근 {months}달 · 모두 {total}회 · 한 달 평균 {avg}회</span>
+      </div>
+      <svg viewBox={"0 0 " + W + " " + H} style={{width:"100%", height:"auto"}} role="img" aria-label="달별 출석 횟수">
+        {[0, Math.round(top / 2), top].filter((v, i, a2) => a2.indexOf(v) === i).map(v => (
+          <g key={v}>
+            <line x1={L} y1={y(v)} x2={W - R} y2={y(v)} stroke="#DDE2EC" strokeWidth="1"/>
+            <text x={L - 6} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#63708A">{v}</text>
+          </g>))}
+        {data.map((d, i) => {
+          const x = L + i * bw + bw * 0.18, w = bw * 0.64;
+          const h = Math.max(0, T + ih - y(d.n));
+          const last = i === data.length - 1;
+          return (
+            <g key={d.mo}>
+              {d.n > 0 &&
+                <rect x={x} y={y(d.n)} width={w} height={h} rx="3"
+                  fill={last ? "#B8912F" : "#22355C"} opacity={last ? 1 : 0.85}/>}
+              {d.n > 0 && <text x={x + w / 2} y={y(d.n) - 4} textAnchor="middle" fontSize="10.5"
+                fill={last ? "#8C6C1E" : "#22355C"} fontWeight="700">{d.n}</text>}
+              <text x={x + w / 2} y={H - 12} textAnchor="middle" fontSize="10.5" fill="#63708A">{label(d.mo)}</text>
+            </g>);
+        })}
+        <line x1={L} y1={T + ih} x2={W - R} y2={T + ih} stroke="#C7CFDE" strokeWidth="1"/>
+      </svg>
+    </div>
+  );
+}
 
 /* ═══ 교회이음 지원 허용 — 관리자가 기간을 정해 엽니다 ═══ */
 function HelpPanel({helpUntil, handover, setHelp, logs, loadLogs}){
@@ -4838,6 +4909,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
 /* ═══ 업데이트 소식 — 새 기능을 올릴 때 맨 위에 한 줄씩 더합니다 ═══
    who: "all" 모두 · "pastor" 관리자·교역자 · "admin" 관리자만  (쓸 수 없는 분에게는 보이지 않습니다) */
 const UPDATES = [
+  {date:"2026-09-29", who:"all",    text:"교인 기록의 예배출석 폴더에 달별 출석 횟수 그래프를 넣었습니다. 최근 12달을 한눈에 보실 수 있습니다."},
   {date:"2026-09-29", who:"all",    text:"휴대폰에서 메뉴를 화면 아래에서 교회 이름 아래로 옮겼습니다. 글씨 단추라 잘 보이고, 휴대폰 아래 막대에 가리지 않습니다."},
   {date:"2026-09-29", who:"admin",  text:"설정 화면을 색 폴더(사진 · 예배·직분 · 속회 · 교회학교 · 명단 · 지원)로 나눴습니다. 길게 내리지 않아도 됩니다."},
   {date:"2026-09-28", who:"all",    text:"교회이음 지원 허용 — 교회가 설정에서 열어 준 기간에만 교회이음이 자료를 고칠 수 있습니다. 접속·수정 기록도 설정 화면에서 보실 수 있습니다."},
