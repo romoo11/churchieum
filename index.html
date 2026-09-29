@@ -784,6 +784,28 @@
   .help-state{border-radius:10px;padding:10px 12px;background:#F3F6FA;border:1px solid var(--line,#dde3ea);font-size:14px}
   .help-state.on{background:#FBF4DF;border-color:#C9A227}
   @media (max-width:640px){ .owner-flag{font-size:11px;padding:2px 8px} }
+  /* 설정 화면 폴더 — 교인 기록과 같은 모양 */
+  .folder-tab.cf-svc, .folder-tab.cf-svc2{background:linear-gradient(180deg,#7CC1F5 0%,#2C8FDC 45%,#1666AB 100%)}
+  .folder-tab.cf-sok {background:linear-gradient(180deg,#FFA273 0%,#EE6A2E 45%,#C9480F 100%)}
+  .folder-tab.cf-school{background:linear-gradient(180deg,#6FD8AA 0%,#27A873 45%,#16804F 100%)}
+  .folder-tab.cf-photo{background:linear-gradient(180deg,#FFE08A 0%,#EDB42E 45%,#C8900A 100%);color:#3B2A00;
+    text-shadow:0 1px 0 rgba(255,255,255,.45)}
+  .folder-tab.cf-data {background:linear-gradient(180deg,#DE8ACB 0%,#B2449F 45%,#862875 100%)}
+  .folder-tab.cf-help {background:linear-gradient(180deg,#9FB0C8 0%,#5E7490 45%,#3D4F66 100%)}
+  .folder-panel.cf-svc  {border-top-color:#1666AB}
+  .folder-panel.cf-svc2 {border-top-color:#1666AB}
+  .folder-panel.cf-sok  {border-top-color:#C9480F}
+  .folder-panel.cf-school{border-top-color:#16804F}
+  .folder-panel.cf-photo{border-top-color:#C8900A}
+  /* 두 칸이 한 폴더에 들어가는 경우 */
+  .folder-wrap{display:none}
+  .folder-wrap.on{display:block}
+  .folder-wrap.cf-data > .panel:first-child{border-top:6px solid #862875;border-top-left-radius:6px;border-top-right-radius:6px;
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.35), 0 2px 8px rgba(34,53,92,.10);margin-top:-2px}
+  .folder-wrap.cf-help > .panel:first-child{border-top:6px solid #3D4F66;border-top-left-radius:6px;border-top-right-radius:6px;
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.35), 0 2px 8px rgba(34,53,92,.10);margin-top:-2px}
+  .folder-panel.cf-svc2{margin-top:12px}
+  @media print{ .folder-wrap{display:block !important} }
   .photo-job{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#F2D98A;
     background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.25);border-radius:999px;
     padding:3px 10px;white-space:nowrap}
@@ -4499,6 +4521,7 @@ function BulkPhotos({members, bulkSave}){
 }
 
 function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initialMessage, members, bulkSave, helpProps}){
+  const [cfgTab, setCfgTab] = useState("svc");   /* 열려 있는 설정 폴더 */
   const [c, setC] = useState(currentChurchConfig());
   const [msg, setMsg] = useState(initialMessage || "");
   const [saveError, setSaveError] = useState("");
@@ -4602,7 +4625,25 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
       </div>
 
       <fieldset className="church-settings-fields" disabled={saving || !homePhotoReady}>
-      <div className="panel church-photo-panel">
+      {(() => {
+        const tabs = [
+          {k:"svc",    l:"예배·직분"},
+          {k:"sok",    l:"속회"},
+          {k:"school", l:"교회학교"},
+          {k:"photo",  l:"사진"},
+          ...(members && bulkSave ? [{k:"data", l:"명부"}] : []),
+          ...(helpProps ? [{k:"help", l:"도움"}] : []),
+        ];
+        const cur = tabs.some(x=>x.k===cfgTab) ? cfgTab : "svc";
+        return (
+          <div className="folder-tabs no-print" role="tablist">
+            {tabs.map(x => (
+              <button key={x.k} type="button" role="tab" aria-selected={cur===x.k}
+                className={"folder-tab cf-" + x.k + (cur===x.k ? " on" : "")} onClick={()=>setCfgTab(x.k)}>{x.l}</button>))}
+          </div>);
+      })()}
+
+      <div className={"panel church-photo-panel folder-panel cf-photo" + (cfgTab==="photo" ? " on" : "")}>
         <h2>홈 화면 교회 사진</h2>
         <p className="muted" style={{marginTop:0}}>사진은 {churchName}의 홈 화면 왼쪽에 표시됩니다. 사진을 선택하고 미리보기를 확인한 뒤 설정 저장을 눌러 주세요.</p>
         <div className="church-photo-preview">
@@ -4645,11 +4686,13 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
         <button type="button" className="btn" disabled={photoBusy || !homePhotoReady} onClick={saveSettings}>{saving ? "저장 중…" : "설정 저장"}</button>
       </div>
 
-      {helpProps && <HelpPanel {...helpProps}/>}
-      {members && bulkSave && <ExcelSheet members={members} bulkSave={bulkSave}/>}
-      {members && bulkSave && <BulkPhotos members={members} bulkSave={bulkSave}/>}
+      {helpProps && <div className={"folder-wrap cf-help" + (cfgTab==="help" ? " on" : "")}><HelpPanel {...helpProps}/></div>}
+      {members && bulkSave && <div className={"folder-wrap cf-data" + (cfgTab==="data" ? " on" : "")}>
+        <ExcelSheet members={members} bulkSave={bulkSave}/>
+        <BulkPhotos members={members} bulkSave={bulkSave}/>
+      </div>}
 
-      <div className="panel">
+      <div className={"panel folder-panel cf-svc" + (cfgTab==="svc" ? " on" : "")}>
         <h2>예배 종류</h2>
         <p className="small muted" style={{marginTop:0}}>출석 체크에 나오는 예배입니다. 요일을 정하면 그 예배를 열 때 가장 가까운 날짜가 자동으로 잡힙니다.</p>
         {c.services.map((s,i)=>(
@@ -4668,7 +4711,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
           {key:"sv"+Date.now().toString(36), label:"새 예배", dow:null}])}>+ 예배 추가</button>
       </div>
 
-      <div className="panel">
+      <div className={"panel folder-panel cf-school" + (cfgTab==="school" ? " on" : "")}>
         <h2>교회학교 부서</h2>
         <p className="small muted" style={{marginTop:0}}>
           우리가 쓰는 나이(세는 나이)입니다. 이 나이대는 속별 명부에서 빠집니다.</p>
@@ -4689,7 +4732,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
           {key:"dp"+Date.now().toString(36), label:"새 부서", min:30, max:39}])}>+ 부서 추가</button>
       </div>
 
-      <div className="panel">
+      <div className={"panel folder-panel cf-sok" + (cfgTab==="sok" ? " on" : "")}>
         <h2>속회(선교회) 편성</h2>
         <div style={{marginBottom:14}}>
           {[["age","나이로 자동","성별과 출생연도로 나눔"],
@@ -4740,7 +4783,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
         </React.Fragment>}
       </div>
 
-      <div className="panel">
+      <div className={"panel folder-panel cf-svc2" + (cfgTab==="svc" ? " on" : "")}>
         <h2>직분</h2>
         <p className="small muted" style={{marginTop:0}}>교인 등록·수정에서 고를 수 있는 직분입니다. 쉼표로 구분해 적으세요.</p>
         <textarea rows="3" value={c.positions.join(", ")}
@@ -4772,6 +4815,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
 /* ═══ 업데이트 소식 — 새 기능을 올릴 때 맨 위에 한 줄씩 더합니다 ═══
    who: "all" 모두 · "pastor" 관리자·교역자 · "admin" 관리자만  (쓸 수 없는 분에게는 보이지 않습니다) */
 const UPDATES = [
+  {date:"2026-09-29", who:"admin",  text:"설정 화면을 색 폴더(예배·직분 · 속회 · 교회학교 · 사진 · 명부 · 도움)로 나눴습니다. 길게 내리지 않아도 됩니다."},
   {date:"2026-09-28", who:"all",    text:"교회이음 도움 허용 — 교회가 설정에서 열어 준 기간에만 교회이음이 자료를 고칠 수 있습니다. 접속·수정 기록도 설정 화면에서 보실 수 있습니다."},
   {date:"2026-09-26", who:"admin",  text:"엑셀로 명부 넣기 — 설정에서 서식을 내려받아 채운 뒤 올리면 교인이 한 번에 등록됩니다. 지금 명부를 엑셀로 내려받을 수도 있습니다."},
   {date:"2026-09-26", who:"admin",  text:"사진 한꺼번에 넣기 — 파일 이름을 교인 이름으로 해 두면 여러 장을 한 번에 넣습니다. 사진은 넣을 때 저절로 작게 줄여 저장합니다."},
