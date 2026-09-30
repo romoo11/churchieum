@@ -275,9 +275,15 @@
     .cal-ev,.cal-bd{font-size:9.5px;padding:0 3px}
   }
   /* 출석 통계 */
-  /* 예배 통계를 위에, 출석자 명단을 아래에 (그래프는 너무 커지지 않게 묶어 둡니다) */
+  /* 넓은 화면: 왼쪽 그래프 · 오른쪽 출석자 명단 / 좁은 화면: 그래프 위 · 명단 아래 */
   .att-summary{display:flex;flex-direction:column;gap:14px;margin-top:12px}
   .att-summary > .att-chart{max-width:620px;width:100%}
+  @media (min-width:900px){
+    .att-summary{display:grid;grid-template-columns:minmax(0,620px) minmax(240px,1fr);
+      gap:18px;align-items:start}
+    .att-summary > .att-chart{max-width:none}
+    .att-summary > .att-names{max-height:none}
+  }
   .att-names{max-height:330px;overflow-y:auto;padding-right:6px;font-size:14.5px;line-height:1.55}
   .att-chart{background:var(--pine-soft);border-radius:12px;padding:12px 14px}
   .chart-head{display:flex;flex-direction:column;gap:1px;margin-bottom:4px}
