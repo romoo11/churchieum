@@ -275,8 +275,9 @@
     .cal-ev,.cal-bd{font-size:9.5px;padding:0 3px}
   }
   /* 출석 통계 */
-  .att-summary{display:grid;grid-template-columns:minmax(200px,1fr) minmax(300px,1.35fr);gap:18px;margin-top:12px}
-  @media(max-width:820px){.att-summary{grid-template-columns:1fr}}
+  /* 예배 통계를 위에, 출석자 명단을 아래에 (그래프는 너무 커지지 않게 묶어 둡니다) */
+  .att-summary{display:flex;flex-direction:column;gap:14px;margin-top:12px}
+  .att-summary > .att-chart{max-width:620px;width:100%}
   .att-names{max-height:330px;overflow-y:auto;padding-right:6px;font-size:14.5px;line-height:1.55}
   .att-chart{background:var(--pine-soft);border-radius:12px;padding:12px 14px}
   .chart-head{display:flex;flex-direction:column;gap:1px;margin-bottom:4px}
@@ -4149,6 +4150,7 @@ function Attendance({members: members0, att: att0, saveAtt, markAtt, refreshAtt,
         </div>
 
         <div className="att-summary">
+          <ChurchMonthChart rows={yearRows} year={year} label={svcObj.label}/>
           <div className="att-names">
             {checked.length===0
               ? <p className="empty" style={{margin:0}}>아직 체크된 분이 없습니다.</p>
@@ -4164,7 +4166,6 @@ function Attendance({members: members0, att: att0, saveAtt, markAtt, refreshAtt,
                     </div>);
                 })}
           </div>
-          <LineChart rows={yearRows} year={year} label={svcObj.label} today={date}/>
         </div>
       </div>
     </div>
@@ -4235,6 +4236,61 @@ function LineChart({rows, year, label, today}){
 
 
 
+
+/* ═══ 교회 예배 출석 — 달별 평균 인원 (교인 기록의 그래프와 같은 모양) ═══ */
+function ChurchMonthChart({rows, year, label}){
+  const list = Array.isArray(rows) ? rows.filter(r => r && typeof r.date === "string") : [];
+  if(!list.length)
+    return <div className="att-chart"><p className="empty" style={{margin:0}}>{year}년 {label} 기록이 아직 없습니다.</p></div>;
+
+  const data = [];
+  for(let mo = 1; mo <= 12; mo++){
+    const key = `${year}-${pad(mo)}`;
+    const ns = list.filter(r => r.date.slice(0, 7) === key).map(r => Number(r.n) || 0);
+    data.push({mo, times:ns.length, n:ns.length ? Math.round(ns.reduce((a, b) => a + b, 0) / ns.length) : 0});
+  }
+  const hi = Math.max(...data.map(d => d.n), 1);
+  const all = list.map(r => Number(r.n) || 0);
+  const avg = Math.round(all.reduce((a, b) => a + b, 0) / all.length);
+  const nowMo = (String(year) === String(new Date().getFullYear())) ? new Date().getMonth() + 1 : 0;
+
+  const W = 560, H = 250, L = 34, R = 10, T = 18, B = 34;
+  const iw = W - L - R, ih = H - T - B, bw = iw / 12;
+  const y = n => T + ih - (n / hi) * ih;
+
+  return (
+    <div className="att-chart">
+      <div className="chart-head">
+        <b>{year}년 {label} 달별 평균 출석</b>
+        <span className="muted small">{list.length}회 · 평균 {avg}명 · 가장 많은 달 {hi}명</span>
+      </div>
+      <svg viewBox={"0 0 " + W + " " + H} style={{width:"100%", height:"auto"}} role="img" aria-label="달별 평균 출석">
+        {[0, Math.round(hi / 2), hi].filter((v, i, a) => a.indexOf(v) === i).map(v => (
+          <g key={v}>
+            <line x1={L} y1={y(v)} x2={W - R} y2={y(v)} stroke="#DDE2EC" strokeWidth="1"/>
+            <text x={L - 6} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#63708A">{v}</text>
+          </g>))}
+        {data.map(d => {
+          const x = L + (d.mo - 1) * bw + bw * 0.18, w = bw * 0.64;
+          const cur = d.mo === nowMo;
+          return (
+            <g key={d.mo}>
+              {d.n > 0 &&
+                <rect x={x} y={y(d.n)} width={w} height={Math.max(0, T + ih - y(d.n))} rx="3"
+                  fill={cur ? "#B8912F" : "#22355C"} opacity={cur ? 1 : 0.85}>
+                  <title>{d.mo}월 · {d.times}회 · 평균 {d.n}명</title>
+                </rect>}
+              {d.n > 0 && <text x={x + w / 2} y={y(d.n) - 4} textAnchor="middle" fontSize="10.5"
+                fill={cur ? "#8C6C1E" : "#22355C"} fontWeight="700">{d.n}</text>}
+              <text x={x + w / 2} y={H - 12} textAnchor="middle" fontSize="10.5" fill="#63708A">{d.mo}월</text>
+            </g>);
+        })}
+        <line x1={L} y1={T + ih} x2={W - R} y2={T + ih} stroke="#C7CFDE" strokeWidth="1"/>
+      </svg>
+    </div>
+  );
+}
+
 /* ═══ 교인 한 사람의 달별 출석 횟수 그래프 ═══
    자료가 어긋나도 멈추지 않도록 모든 값을 확인하며 셉니다. */
 function MemberMonthChart({att, memberId, months = 12}){
@@ -4263,7 +4319,7 @@ function MemberMonthChart({att, memberId, months = 12}){
   const total = data.reduce((s, d) => s + d.n, 0);
   if(!total) return <div className="att-chart"><p className="empty" style={{margin:0}}>최근 {months}달 출석 기록이 아직 없습니다.</p></div>;
 
-  const W = 560, H = 210, L = 30, R = 10, T = 16, B = 34;
+  const W = 560, H = 150, L = 26, R = 8, T = 14, B = 26;
   const iw = W - L - R, ih = H - T - B;
   const hi = Math.max(...data.map(d => d.n));
   const top = Math.max(hi, 1);
@@ -4282,7 +4338,7 @@ function MemberMonthChart({att, memberId, months = 12}){
         {[0, Math.round(top / 2), top].filter((v, i, a2) => a2.indexOf(v) === i).map(v => (
           <g key={v}>
             <line x1={L} y1={y(v)} x2={W - R} y2={y(v)} stroke="#DDE2EC" strokeWidth="1"/>
-            <text x={L - 6} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#63708A">{v}</text>
+            <text x={L - 5} y={y(v) + 4} textAnchor="end" fontSize="10" fill="#63708A">{v}</text>
           </g>))}
         {data.map((d, i) => {
           const x = L + i * bw + bw * 0.18, w = bw * 0.64;
@@ -4293,9 +4349,9 @@ function MemberMonthChart({att, memberId, months = 12}){
               {d.n > 0 &&
                 <rect x={x} y={y(d.n)} width={w} height={h} rx="3"
                   fill={last ? "#B8912F" : "#22355C"} opacity={last ? 1 : 0.85}/>}
-              {d.n > 0 && <text x={x + w / 2} y={y(d.n) - 4} textAnchor="middle" fontSize="10.5"
+              {d.n > 0 && <text x={x + w / 2} y={y(d.n) - 3} textAnchor="middle" fontSize="9.5"
                 fill={last ? "#8C6C1E" : "#22355C"} fontWeight="700">{d.n}</text>}
-              <text x={x + w / 2} y={H - 12} textAnchor="middle" fontSize="10.5" fill="#63708A">{label(d.mo)}</text>
+              <text x={x + w / 2} y={H - 9} textAnchor="middle" fontSize="9.5" fill="#63708A">{label(d.mo)}</text>
             </g>);
         })}
         <line x1={L} y1={T + ih} x2={W - R} y2={T + ih} stroke="#C7CFDE" strokeWidth="1"/>
@@ -4909,7 +4965,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
 /* ═══ 업데이트 소식 — 새 기능을 올릴 때 맨 위에 한 줄씩 더합니다 ═══
    who: "all" 모두 · "pastor" 관리자·교역자 · "admin" 관리자만  (쓸 수 없는 분에게는 보이지 않습니다) */
 const UPDATES = [
-  {date:"2026-09-29", who:"all",    text:"교인 기록의 예배출석 폴더에 달별 출석 횟수 그래프를 넣었습니다. 최근 12달을 한눈에 보실 수 있습니다."},
+  {date:"2026-09-29", who:"all",    text:"교인 기록의 예배출석 폴더에 달별 출석 횟수 그래프를 넣었습니다. 출석 화면의 교회 출석 통계도 달별 막대 그래프로 바꾸고, 그래프를 출석자 명단 위로 올렸습니다."},
   {date:"2026-09-29", who:"all",    text:"휴대폰에서 메뉴를 화면 아래에서 교회 이름 아래로 옮겼습니다. 글씨 단추라 잘 보이고, 휴대폰 아래 막대에 가리지 않습니다."},
   {date:"2026-09-29", who:"admin",  text:"설정 화면을 색 폴더(사진 · 예배·직분 · 속회 · 교회학교 · 명단 · 지원)로 나눴습니다. 길게 내리지 않아도 됩니다."},
   {date:"2026-09-28", who:"all",    text:"교회이음 지원 허용 — 교회가 설정에서 열어 준 기간에만 교회이음이 자료를 고칠 수 있습니다. 접속·수정 기록도 설정 화면에서 보실 수 있습니다."},
