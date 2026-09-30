@@ -279,12 +279,11 @@
   .att-summary{display:flex;flex-direction:column;gap:14px;margin-top:12px}
   .att-summary > .att-chart{max-width:620px;width:100%}
   @media (min-width:900px){
-    /* 그래프를 오른쪽에 띄워 두고, 출석자 명단이 그 왼쪽과 아래를 채웁니다
-       (교회학교·미소속처럼 인원이 적은 묶음이 그래프 옆 빈자리에 들어갑니다) */
-    .att-summary{display:block}
-    .att-summary > .att-chart{float:right;width:min(560px,50%);margin:0 0 14px 18px;max-width:none}
-    .att-summary > .att-names{max-height:none;overflow:visible;padding-right:0}
-    .att-summary::after{content:"";display:block;clear:both}
+    /* 왼쪽에 출석자 명단, 오른쪽 아래 빈자리에 그래프 */
+    .att-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,540px);
+      gap:18px;align-items:end}
+    .att-summary > .att-names{grid-column:1;grid-row:1;max-height:none;overflow:visible;padding-right:0}
+    .att-summary > .att-chart{grid-column:2;grid-row:1;align-self:end;max-width:none;margin:0}
   }
   .att-names{max-height:330px;overflow-y:auto;padding-right:6px;font-size:14.5px;line-height:1.55}
   .att-chart{background:var(--pine-soft);border-radius:12px;padding:12px 14px}
