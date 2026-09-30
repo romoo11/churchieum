@@ -279,11 +279,11 @@
   .att-summary{display:flex;flex-direction:column;gap:14px;margin-top:12px}
   .att-summary > .att-chart{max-width:620px;width:100%}
   @media (min-width:900px){
-    /* 왼쪽에 출석자 명단, 오른쪽 아래 빈자리에 그래프 */
-    .att-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,540px);
-      gap:18px;align-items:end}
-    .att-summary > .att-names{grid-column:1;grid-row:1;max-height:none;overflow:visible;padding-right:0}
-    .att-summary > .att-chart{grid-column:2;grid-row:1;align-self:end;max-width:none;margin:0}
+    /* 명단은 위에서 화면 폭을 다 쓰고, 그래프는 아래쪽 짧은 묶음 옆에 자리잡습니다 */
+    .att-summary{display:block}
+    .att-summary > .att-names{max-height:none;overflow:visible;padding-right:0}
+    .att-names > .att-chart{float:right;width:min(520px,46%);margin:0 0 10px 18px;max-width:none}
+    .att-names::after{content:"";display:block;clear:both}
   }
   .att-names{max-height:330px;overflow-y:auto;padding-right:6px;font-size:14.5px;line-height:1.55}
   .att-chart{background:var(--pine-soft);border-radius:12px;padding:12px 14px}
@@ -4163,21 +4163,37 @@ function Attendance({members: members0, att: att0, saveAtt, markAtt, refreshAtt,
         </div>
 
         <div className="att-summary">
-          <ChurchMonthChart rows={yearRows} year={year} label={svcObj.label}/>
           <div className="att-names">
-            {checked.length===0
-              ? <p className="empty" style={{margin:0}}>아직 체크된 분이 없습니다.</p>
-              : groups.filter(g=>g.items.some(m=>checked.includes(m.id))).map(g=>{
-                  const on = g.items.filter(m=>checked.includes(m.id));
-                  return (
-                    <div key={g.key} style={{marginBottom:9}}>
-                      <div className="row small" style={{gap:6, alignItems:"baseline"}}>
-                        <b style={{color:"var(--pine-deep)"}}>{g.label}</b>
-                        <span className="muted">{on.length}명</span>
-                      </div>
-                      <div style={{marginTop:2}}>{on.map(m=>m.name).join(", ")}</div>
-                    </div>);
-                })}
+            {(() => {
+              if(checked.length === 0) return <p className="empty" style={{margin:0}}>아직 체크된 분이 없습니다.</p>;
+              const shown = groups.filter(g => g.items.some(m => checked.includes(m.id)));
+              const draw = g => {
+                const on = g.items.filter(m => checked.includes(m.id));
+                return (
+                  <div key={g.key} style={{marginBottom:9}}>
+                    <div className="row small" style={{gap:6, alignItems:"baseline"}}>
+                      <b style={{color:"var(--pine-deep)"}}>{g.label}</b>
+                      <span className="muted">{on.length}명</span>
+                    </div>
+                    <div style={{marginTop:2}}>{on.map(m => m.name).join(", ")}</div>
+                  </div>);
+              };
+              /* 그래프는 뒤쪽 짧은 묶음들 옆에 띄웁니다 — 앞쪽 묶음은 화면 폭을 다 씁니다 */
+              let cut = shown.length;
+              let lines = 0;
+              for(let i = shown.length - 1; i >= 0; i--){
+                const n = shown[i].items.filter(m => checked.includes(m.id)).length;
+                lines += 2 + Math.floor(n / 9);          /* 제목 줄 + 이름 줄 */
+                if(lines > 11) break;                     /* 그래프 높이만큼만 */
+                cut = i;
+              }
+              return (
+                <React.Fragment>
+                  {shown.slice(0, cut).map(draw)}
+                  <ChurchMonthChart rows={yearRows} year={year} label={svcObj.label}/>
+                  {shown.slice(cut).map(draw)}
+                </React.Fragment>);
+            })()}
           </div>
         </div>
       </div>
