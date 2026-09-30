@@ -507,10 +507,10 @@
     background:linear-gradient(180deg,#5A7FB4 0%,#2E4E82 42%,#22355C 100%);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.42), inset 0 -2px 5px rgba(0,0,0,.20),
       0 2px 5px rgba(22,34,61,.28)}
-  .att-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:5px;margin-top:12px}
-  @media (max-width:560px){ .att-list{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))} }
-  .att-item{display:flex;align-items:center;gap:6px;border:1px solid #BAC5D9;border-radius:11px;
-    padding:6px 8px;font-weight:500;text-align:left;font-size:13.5px;
+  /* 이름만 넣고 글자에 맞춰 칸을 작게 (직분은 명부에서 봅니다) */
+  .att-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+  .att-item{flex:0 0 auto;display:flex;align-items:center;gap:5px;border:1px solid #BAC5D9;border-radius:10px;
+    padding:5px 9px 5px 7px;font-weight:500;text-align:left;font-size:13.5px;
     white-space:nowrap;overflow:hidden;
     background:linear-gradient(180deg,#FFFFFF 0%,#EFF3F9 46%,#DCE3EF 100%);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.95), inset 0 -2px 4px rgba(34,53,92,.08),
@@ -525,8 +525,13 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,.42), inset 0 -2px 5px rgba(0,0,0,.20),
       0 2px 5px rgba(22,34,61,.28)}
   .att-item.on .muted{color:#C3D1E8}
-  .att-item .mark{flex:none;width:17px;height:17px;border-radius:5px;border:2px solid var(--line);
-    display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#fff;background:#fff}
+  .att-item .mark{flex:none;width:15px;height:15px;border-radius:4px;border:2px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#fff;background:#fff}
+  @media (max-width:640px){
+    .att-list{gap:4px}
+    .att-item{padding:4px 7px 4px 6px;font-size:13px;gap:4px;border-radius:9px}
+    .att-item .mark{width:14px;height:14px;font-size:10px}
+  }
   .att-item.on .mark{background:#fff;border-color:#fff;color:#22355C}
   .att-item .muted{font-size:11px}
   .count-badge{font-family:"Gowun Batang",serif;font-size:22px;font-weight:700;color:var(--pine)}
@@ -3726,8 +3731,7 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
 
       <div className={"panel folder-panel f-att" + ((tab==="att" || (tab!=="fam" && tab!=="dept" && tab!=="att" && tab!=="visit" && tab!=="pray" && "att"==="fam")) ? " on" : "")}>
         <h2>예배 출석 현황</h2>
-        <MemberMonthChart att={att} memberId={m.id}/>
-        <div className="tbl-wrap" style={{marginTop:12}}><table>
+        <div className="tbl-wrap"><table>
           <thead><tr><th>예배</th><th>올해 출석</th><th>누적</th><th>최근 출석일</th></tr></thead>
           <tbody>{attStat.map(s=>(
             <tr key={s.key}><td>{s.special && "✦ "}{s.label}</td>
@@ -3735,6 +3739,7 @@ function MemberDetail({m, att, setMemView, update, remove, canEdit, canDelete, a
               <td>{s.total}회</td>
               <td>{s.last ? `${s.last} (${weekdayOf(s.last)})` : <span className="muted">기록 없음</span>}</td></tr>))}
           </tbody></table></div>
+        <MemberMonthChart att={att} memberId={m.id}/>
         {canAtt && <p className="muted small" style={{marginBottom:0}}>출석 체크는 상단 <b>출석</b> 메뉴에서 예배별로 진행합니다.</p>}
       </div>
 
@@ -4129,7 +4134,7 @@ function Attendance({members: members0, att: att0, saveAtt, markAtt, refreshAtt,
                         title={mayCheck(m) && lead && canOrder && saveOrder ? leadKind : undefined}
                         aria-pressed={on}>
                         <span className="mark">{on?"✓":""}</span>
-                        <span>{m.name} <span className="muted small">{m.position}</span></span>
+                        <span className="att-name">{m.name}</span>
                       </button>);
                   })}
                 </div>}
@@ -4319,7 +4324,7 @@ function MemberMonthChart({att, memberId, months = 12}){
   const total = data.reduce((s, d) => s + d.n, 0);
   if(!total) return <div className="att-chart"><p className="empty" style={{margin:0}}>최근 {months}달 출석 기록이 아직 없습니다.</p></div>;
 
-  const W = 560, H = 150, L = 26, R = 8, T = 14, B = 26;
+  const W = 560, H = 112, L = 24, R = 8, T = 12, B = 22;
   const iw = W - L - R, ih = H - T - B;
   const hi = Math.max(...data.map(d => d.n));
   const top = Math.max(hi, 1);
@@ -4351,7 +4356,7 @@ function MemberMonthChart({att, memberId, months = 12}){
                   fill={last ? "#B8912F" : "#22355C"} opacity={last ? 1 : 0.85}/>}
               {d.n > 0 && <text x={x + w / 2} y={y(d.n) - 3} textAnchor="middle" fontSize="9.5"
                 fill={last ? "#8C6C1E" : "#22355C"} fontWeight="700">{d.n}</text>}
-              <text x={x + w / 2} y={H - 9} textAnchor="middle" fontSize="9.5" fill="#63708A">{label(d.mo)}</text>
+              <text x={x + w / 2} y={H - 7} textAnchor="middle" fontSize="9" fill="#63708A">{label(d.mo)}</text>
             </g>);
         })}
         <line x1={L} y1={T + ih} x2={W - R} y2={T + ih} stroke="#C7CFDE" strokeWidth="1"/>
@@ -4965,6 +4970,7 @@ function ChurchConfig({saveConfig, churchName, homePhoto, homePhotoReady, initia
 /* ═══ 업데이트 소식 — 새 기능을 올릴 때 맨 위에 한 줄씩 더합니다 ═══
    who: "all" 모두 · "pastor" 관리자·교역자 · "admin" 관리자만  (쓸 수 없는 분에게는 보이지 않습니다) */
 const UPDATES = [
+  {date:"2026-09-30", who:"all",    text:"출석 체크의 이름 칸에서 직분을 빼고 칸을 작게 줄였습니다. 한 화면에 더 많은 분이 들어옵니다."},
   {date:"2026-09-29", who:"all",    text:"교인 기록의 예배출석 폴더에 달별 출석 횟수 그래프를 넣었습니다. 출석 화면의 교회 출석 통계도 달별 막대 그래프로 바꾸고, 그래프를 출석자 명단 위로 올렸습니다."},
   {date:"2026-09-29", who:"all",    text:"휴대폰에서 메뉴를 화면 아래에서 교회 이름 아래로 옮겼습니다. 글씨 단추라 잘 보이고, 휴대폰 아래 막대에 가리지 않습니다."},
   {date:"2026-09-29", who:"admin",  text:"설정 화면을 색 폴더(사진 · 예배·직분 · 속회 · 교회학교 · 명단 · 지원)로 나눴습니다. 길게 내리지 않아도 됩니다."},
