@@ -311,6 +311,12 @@
   .brand{font-family:"Gowun Batang",serif;font-weight:700;font-size:18px;
     display:flex;align-items:center;gap:7px;white-space:nowrap}
   .brand svg{flex:none}
+  .logo-mark{display:inline-flex;align-items:center;justify-content:center;flex:none;
+    width:26px;height:26px;border-radius:7px;background:linear-gradient(180deg,#22355C,#16223D)}
+  .logo-mark img{width:84%;height:84%;object-fit:contain;display:block}
+  header.top .logo-mark{width:30px;height:30px;background:transparent}
+  header.top .logo-mark img{width:100%;height:100%}
+  .center-box .logo-line .logo-mark{width:34px;height:34px;border-radius:9px}
   .brand button{background:none;border:none;color:inherit;font:inherit;padding:0;text-align:left}
   .brand button:hover{text-decoration:underline}
   .logo-btn{background:transparent;border:0;padding:0;line-height:0;cursor:pointer;
@@ -358,6 +364,7 @@
   @media (max-width:1080px){
     .brand{font-size:15.5px;gap:6px}
     .brand svg{width:22px;height:22px}
+    header.top .logo-mark{width:26px;height:26px}
     nav button{padding:6px 7px;font-size:13.5px}
     .backup-btn{padding:5px 8px;font-size:12px}
     .back-btn{padding:5px 9px;font-size:13px}
@@ -608,6 +615,7 @@
     .top-in > .brand{flex:1 1 100%;min-width:0}
     .brand{font-size:14.5px;gap:5px}
     .brand svg{width:20px;height:20px}
+    header.top .logo-mark{width:24px;height:24px}
     .brand button{max-width:62vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     /* 좁은 화면에서는 메뉴 이름을 짧게 (중보기도 → 중보) */
     header.top nav .nv-long{display:none}
@@ -1679,13 +1687,11 @@ function HeroArt(){
 }
 
 function Logo(){
+  /* 교우이음 마크 — 흰 그림이라 남색 판 위에 얹습니다 (위 띠에서는 판이 바탕과 같은 색이라 그림만 보입니다) */
   return (
-    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
-      <path d="M 4 24 L 4 12 A 9 9 0 0 1 22 12 L 22 24 Z" fill="#C29B3C" stroke="#EEF1F7" strokeWidth="1.6"/>
-      <line x1="13" y1="6" x2="13" y2="13" stroke="#16223D" strokeWidth="2.4" strokeLinecap="round"/>
-      <line x1="9.5" y1="9" x2="16.5" y2="9" stroke="#16223D" strokeWidth="2.4" strokeLinecap="round"/>
-      <circle cx="13" cy="18" r="2.6" fill="#16223D"/>
-    </svg>
+    <span className="logo-mark" aria-hidden="true">
+      <img src={typeof BRAND_MARK==="string" ? BRAND_MARK : ""} alt=""/>
+    </span>
   );
 }
 
@@ -2324,9 +2330,22 @@ function App({sb, profile, logout, churchId, leaveChurch}){
     ]);
     if(m.error) return fail(m.error);
     if(a.error) return fail(a.error);
-    setMembers((m.data||[]).map(r=>r.data));
+    /* 자료가 어긋나도 화면이 멈추지 않게: 빈 줄을 빼고, 기도·심방·가족·봉사 목록 안의 빈 칸도 뺍니다 */
+    setMembers((m.data||[]).filter(r=>r && r.data && typeof r.data==="object").map(r=>{
+      const x = {...r.data};
+      ["prayers","visits","family","depts"].forEach(k=>{
+        if(x[k] != null) x[k] = Array.isArray(x[k]) ? x[k].filter(v=>v && typeof v==="object") : [];
+      });
+      /* 글자로 써야 하는 칸이 숫자 등으로 들어와 있으면 글자로 (생년월일 19580211 → 1958-02-11) */
+      ["name","position","gender","birth","phone","address","memo"].forEach(k=>{
+        if(x[k] != null && typeof x[k] !== "string") x[k] = String(x[k]);
+      });
+      if(typeof x.birth==="string" && /^\d{8}$/.test(x.birth))
+        x.birth = x.birth.slice(0,4)+"-"+x.birth.slice(4,6)+"-"+x.birth.slice(6,8);
+      return x;
+    }));
     const na = {};
-    (a.data||[]).forEach(r=>{ na[r.date] = na[r.date]||{}; na[r.date][r.service] = r.ids||[]; });
+    (a.data||[]).filter(r=>r && r.date && r.service).forEach(r=>{ na[r.date] = na[r.date]||{}; na[r.date][r.service] = r.ids||[]; });
     setAtt(na);
     if(s.error) fail(s.error);
     if(!s.error){
@@ -2335,7 +2354,7 @@ function App({sb, profile, logout, churchId, leaveChurch}){
       }catch(photoError){
         setErr("홈 사진을 불러오지 못했습니다. 다시 불러오기를 눌러 주세요. " + errMsg(photoError));
       }
-      const cc = (s.data||[]).find(r=>r.key==="churchConfig");
+      const cc = (s.data||[]).find(r=>r && r.key==="churchConfig");
       if(cc && cc.value){ try{ applyChurchConfig(JSON.parse(cc.value)); setCfgVer(v=>v+1); }catch(_){} }
       const sp = (s.data||[]).find(r=>r.key==="specialServices");
       if(sp && sp.value){ try{ setSpecials(JSON.parse(sp.value)||[]); }catch(_){ setSpecials([]); } }
