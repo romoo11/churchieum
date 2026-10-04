@@ -561,39 +561,24 @@
   .modal-back .panel{max-width:440px;width:100%;margin:0}
 
   /* ── 로그인 화면 ── */
-  .auth-wrap{max-width:980px;margin:52px auto;padding:0 18px;display:grid;
-    grid-template-columns:1fr minmax(360px,420px);gap:46px;align-items:center}
-  .auth-intro{color:#22355C}
-  .auth-mark{width:58px;height:58px;border-radius:16px;background:linear-gradient(180deg,#22355C,#16223D);
-    display:flex;align-items:center;justify-content:center;margin-bottom:16px;
-    box-shadow:0 6px 18px rgba(22,34,61,.25)}
-  .auth-mark svg{width:34px;height:34px}
-  .auth-intro h1{font-size:40px;font-weight:800;letter-spacing:-1px;margin:0 0 10px}
-  .auth-tag{font-size:19px;line-height:1.5;color:#44506B;margin-bottom:22px}
-  .auth-points{list-style:none;margin:0 0 20px;padding:0}
-  .auth-points li{position:relative;padding-left:20px;margin:9px 0;font-size:15px;color:#44506B;line-height:1.5}
-  .auth-points li::before{content:"";position:absolute;left:2px;top:8px;width:7px;height:7px;border-radius:50%;
-    background:linear-gradient(180deg,#E3C766,#B8912F)}
-  .auth-points b{color:#22355C}
-  .auth-note{font-size:13px;color:#7A879C;line-height:1.6;border-top:1px solid var(--line);padding-top:14px}
+  .auth-wrap{max-width:440px;margin:54px auto;padding:0 18px}
+  .auth-intro{color:#22355C;text-align:center;margin-bottom:22px}
+  .auth-mark{width:66px;height:66px;border-radius:19px;background:linear-gradient(180deg,#22355C,#16223D);
+    display:flex;align-items:center;justify-content:center;margin:0 auto 14px;
+    box-shadow:0 8px 20px rgba(22,34,61,.26)}
+  .auth-mark svg{width:38px;height:38px}
+  .auth-intro h1{font-size:34px;font-weight:800;letter-spacing:-1px;margin:0 0 8px}
+  .auth-tag{font-size:15.5px;line-height:1.6;color:#6B7890;margin:0}
   .auth-form .panel{margin:0}
   .auth-foot{margin-top:14px;text-align:center;font-size:12px;color:#9AA5B8}
   .auth-small-logo{display:none}
-  @media (max-width:900px){
-    .auth-wrap{grid-template-columns:1fr;gap:26px;margin:28px auto;max-width:470px}
-    .auth-intro{text-align:center}
-    .auth-mark{margin:0 auto 12px}
-    .auth-intro h1{font-size:30px}
-    .auth-tag{font-size:16px;margin-bottom:16px}
-    .auth-points{text-align:left;max-width:360px;margin:0 auto 16px}
-    .auth-points li{font-size:14px}
-    .auth-note{text-align:center}
-  }
   @media (max-width:560px){
-    .auth-points{display:none}
-    .auth-note{display:none}
-    .auth-intro h1{font-size:26px;margin-bottom:6px}
-    .auth-tag{font-size:14.5px}
+    .auth-wrap{margin:32px auto}
+    .auth-mark{width:58px;height:58px;border-radius:17px;margin-bottom:11px}
+    .auth-mark svg{width:33px;height:33px}
+    .auth-intro h1{font-size:28px;margin-bottom:6px}
+    .auth-tag{font-size:14px}
+    .auth-intro{margin-bottom:16px}
   }
   .center-box{max-width:430px;margin:60px auto;padding:0 16px}
   .center-box .panel{padding:26px 26px 24px}
@@ -1758,15 +1743,7 @@ function Auth({sb, resetServer, embedded, recoveryFailed}){
       <div className="auth-intro">
         <div className="auth-mark"><Logo/></div>
         <h1>교우이음</h1>
-        <p className="auth-tag">한 사람 한 사람을 기억하고<br/>돌보기 위한 목양 수첩</p>
-        <ul className="auth-points">
-          <li><b>교인 명단</b> 직분별·속별·교회학교로 나누어 봅니다</li>
-          <li><b>출석 체크</b> 예배당에서 휴대폰으로 바로 합니다</li>
-          <li><b>심방·중보기도</b> 다녀온 걸음과 기도 제목을 모읍니다</li>
-          <li><b>담당별 권한</b> 속장은 자기 속만, 교사는 자기 부서만 봅니다</li>
-        </ul>
-        <p className="auth-note">교인은 들어오지 않는, 돌보는 사람들의 도구입니다.<br/>
-          명단 옮겨 넣기가 필요하시면 <b>romoo2@hanmail.net</b>으로 알려 주세요.</p>
+        <p className="auth-tag">한 사람 한 사람을 기억하고 돌보기 위한 목양 수첩</p>
       </div>
 
       <div className="auth-form">
